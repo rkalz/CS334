@@ -15,7 +15,8 @@ def get_my_bytes(host, port, blazerid, is_ssl):
 
     try:
         sock.connect((host, port))
-    except:
+    except Exception as e:
+        print(e)
         return
 
     header = "cs334fall2018"
@@ -32,8 +33,9 @@ def get_my_bytes(host, port, blazerid, is_ssl):
         response = response.decode(encoding='ascii')
         response = response[:-1]                        # Strip \n from end of response
         response = response.split(' ')
-    except:
-        # If we get an exception, close the socket and return
+    except Exception as e:
+        # If we get an except Exception as eion, close the socket and return
+        print(e)
         sock.close()
         return
 
@@ -46,7 +48,8 @@ def get_my_bytes(host, port, blazerid, is_ssl):
             first_number = int(response[2])
             operator = response[3]
             second_number = int(response[4])
-        except:
+        except Exception as e:
+            print(e)
             sock.close()
             return
 
@@ -77,7 +80,8 @@ def get_my_bytes(host, port, blazerid, is_ssl):
             response = response.decode(encoding='ascii')
             response = response[:-1]
             response = response.split(' ')
-        except:
+        except Exception as e:
+            print(e)
             sock.close()
             return
 
@@ -93,7 +97,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--port", type=int, help="specify a custom port")
     parser.add_argument("-s", "--ssl", help="specify if using ssl", action='store_true')
-    parser.add_argument("hostname", type=str, help="specify hostname of server")
+    parser.add_argument("hostname", type=str, help="specify hostname or IP of server")
     parser.add_argument("blazerid", type=str, help="specify blazerid")
 
     args = parser.parse_args()
@@ -102,14 +106,14 @@ if __name__ == "__main__":
     if args.port is not None:
         port = args.port
     elif args.ssl:
-        # Default port
+        # Default ssl port
         port = 27994
     else:
-        # Defaukt ssl port
+        # Default port
         port = 27993
 
     host = None
-    if host == "cs334":
+    if args.hostname.lower() == "cs334":
         host = "138.26.64.45"
     else:
         host = socket.gethostbyname(args.hostname)
