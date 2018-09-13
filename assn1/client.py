@@ -14,7 +14,8 @@ def get_my_bytes(host, port, blazerid, is_ssl):
         sock = ssl.wrap_socket(sock)                  # The single, magic line that makes this an SSL socket
 
     try:
-        sock.connect((host, port))
+        print("SSL has been disabled")
+        # sock.connect((host, port))
     except Exception as e:
         print(e)
         return
