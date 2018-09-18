@@ -11,11 +11,11 @@ def get_my_bytes(host, port, blazerid, is_ssl):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(10)
     if is_ssl:
-        sock = ssl.wrap_socket(sock)                  # The single, magic line that makes this an SSL socket
+        print("SSL has been disabled")
+        # sock = ssl.wrap_socket(sock)                  # The single, magic line that makes this an SSL socket
 
     try:
-        print("SSL has been disabled")
-        # sock.connect((host, port))
+        sock.connect((host, port))
     except Exception as e:
         print(e)
         return
