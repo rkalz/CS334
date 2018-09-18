@@ -1,5 +1,6 @@
 import socket
 
+
 # HttpHandler used primarily to keep track of cookies
 class HttpHandler:
     def __init__(self, debug):
@@ -9,13 +10,17 @@ class HttpHandler:
         self.host = "odin.cs.uab.edu"
         self.port = 3001
         self.cookies = dict()
+        self.connected = False
 
         self.debug = debug
 
-
     # Connects to Odin on port 3001
     # Returns true if successful, otherwise false
+    # Needed just in case connection fails
     def connect(self):
+        if self.connected:
+            return False
+
         try:
             self.socket.connect((self.host, self.port))
         except Exception as e:
@@ -23,6 +28,23 @@ class HttpHandler:
                 print("failed to connect to socket: " + str(e))
             return False
 
+        self.connected = True
+        return True
+
+    # Close the socket when done
+    # Returns true if successful, otherwise false
+    def close(self):
+        if not self.connected:
+            return False
+
+        try:
+            self.socket.close()
+        except Exception as e:
+            if self.debug:
+                print("failed to close socket: " + str(e))
+            return False
+
+        self.connected = False
         return True
 
     # Sends a HTTP request over the connect
@@ -31,10 +53,15 @@ class HttpHandler:
     #   i.e. http://odin.cs.uab.edu:3001/fakebook -> /fakebook
     #   it is the job of the person using this function to remove the domain
     #   and make sure the path exists on http://odin.cs.uab.edu:3001
-    #   URL parameters should be passed (/fakebook/?user=hello&pass=there)
-    # returns (True, raw HTML response) if successful
-    # returns (False, None) if failed
+    #   URL parameters should be passed like "/fakebook/?user=hello&pass=there"
+    # returns raw HTML response if successful
+    # returns None if failed
     def send_request(self, type, url):
+        if not self.connected:
+            if self.debug:
+                print("Socket is not connected, try connect()")
+            return None
+
         body = None
         if url.find("?") != -1:
             # Remove url paramaters and place them in body
@@ -42,7 +69,7 @@ class HttpHandler:
             body = url[url.find("?"):]
 
         request = type + " " + url + " HTTP/1.0\r\n"
-        request += "User-Agent: CS 334 Project 2 Group 1\r\n" # This is just for fun
+        request += "User-Agent: CS 334 Project 2 Group 1\r\n"  # This is just for fun
         # If there are saved cookies, add them to the request
         if len(self.cookies) != 0:
             request += "Cookie: "
@@ -63,7 +90,7 @@ class HttpHandler:
         except Exception as e:
             if self.debug:
                 print("failed to send to socket: " + str(e))
-            return False, _
+            return None
 
         # Read entire response, return if socket fails
         try:
@@ -76,7 +103,7 @@ class HttpHandler:
         except Exception as e:
             if self.debug:
                 print("failed to read response from socket: " + str(e))
-            return False, _
+            return None
 
         response_lines = response.split("\r\n")
 
@@ -84,7 +111,7 @@ class HttpHandler:
         http_status = response_lines[0]
         if http_status.find("HTTP") == -1:
             # We didn't get a HTTP response
-            return False, None
+            return None
 
         if http_status.find("301") != -1 or http_status.find("302") != -1:
             # Redirect by finding location header
@@ -96,20 +123,20 @@ class HttpHandler:
                     redirect_url = line[line.find(":") + 2]
                     if redirect_url.find("odin.cs.uab.edu") == -1:
                         # url redirects outside of Odin
-                        return False, None
+                        return None
 
                     # Strip domain/port from request (five characters after the colon from the port number
                     redirect_url = redirect_url[redirect_url.rfind(":") + 5:]
                     return self.send_request(request, redirect_url)
 
             # Didn't find a Location header
-            return False, None
+            return None
 
         if http_status.find("403") != -1 or http_status.find("404") != -1:
             # Forbidden or Not Found - Stop looking
             if self.debug:
                 print("encountered 403 Forbidden or 404 Not Found")
-            return False, None
+            return None
 
         if http_status.find("500") != -1:
             # Internal Server Error - Should retry
@@ -124,14 +151,31 @@ class HttpHandler:
                 cookie_value = line[line.find("=") + 1:line.find(";")]
                 self.cookies[cookie_name] = cookie_value
 
-        return True, response
+        # Remove HTTP stuff from response for HTML parser
+        response = response[response.find("\r\n\r\n") + 5:]
+
+        return response
 
 
 if __name__ == "__main__":
-    debug = True
     handler = HttpHandler(debug=True)
     socket_status = handler.connect() # Implemented in case socket connect fails on first try
     if not socket_status:
         print("Failed to connect")
     else:
-        print(handler.send_request("GET", "/fakebook/")[1])
+        # Test simple get
+        home_page = handler.send_request("GET", "/fakebook/")
+        if home_page is not None:
+            print(home_page)
+
+        # Test POST and params
+        main_menu = handler.send_request("POST", "")
+        if main_menu is not None:
+            print(main_menu)
+
+        # Test GET with cookies
+        user_menu = handler.send_request("GET", "")
+        if user_menu is not None:
+            print(user_menu)
+
+    handler.close()
