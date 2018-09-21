@@ -4,8 +4,7 @@ import socket
 # HttpHandler used primarily to keep track of cookies
 class HttpHandler:
     def __init__(self, debug):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.settimeout(30)
+        self.socket = None
 
         self.host = "odin.cs.uab.edu"
         self.port = 3001
@@ -17,9 +16,12 @@ class HttpHandler:
     # Connects to Odin on port 3001
     # Returns true if successful, otherwise false
     # Needed just in case connection fails
-    def connect(self):
+    def _connect(self):
         if self.connected:
             return False
+
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.settimeout(30)
 
         try:
             self.socket.connect((self.host, self.port))
@@ -33,7 +35,7 @@ class HttpHandler:
 
     # Close the socket when done
     # Returns true if successful, otherwise false
-    def close(self):
+    def _close(self):
         if not self.connected:
             return False
 
@@ -57,19 +59,15 @@ class HttpHandler:
     # returns raw HTML response if successful
     # returns None if failed
     def send_request(self, type, url):
-        if not self.connected:
-            if self.debug:
-                print("Socket is not connected, try connect()")
-            return None
+        self._connect()
 
         body = None
         if url.find("?") != -1:
             # Remove url paramaters and place them in body
+            body = url[url.find("?")+1:]
             url = url[:url.find("?")]
-            body = url[url.find("?"):]
 
         request = type + " " + url + " HTTP/1.0\r\n"
-        request += "User-Agent: CS 334 Project 2 Group 1\r\n"  # This is just for fun
         # If there are saved cookies, add them to the request
         if len(self.cookies) != 0:
             request += "Cookie: "
@@ -80,8 +78,7 @@ class HttpHandler:
             request += "\r\n"
         request += "\r\n"
         if body is not None:
-            request += body + "\r\n"
-            request += "\r\n"
+            request += body
 
         # Encode and send request, return False if socket fails
         request = request.encode()
@@ -95,16 +92,17 @@ class HttpHandler:
         # Read entire response, return if socket fails
         try:
             response = ""
-            raw_response = self.socket.recv(4096)
+            raw_response = self.socket.recv(1024)
             while len(raw_response) > 0:
                 raw_response = raw_response.decode()
                 response += raw_response
-                raw_response = self.socket.recv(4096)
+                raw_response = self.socket.recv(1024)
         except Exception as e:
             if self.debug:
                 print("failed to read response from socket: " + str(e))
             return None
 
+        self._close()
         response_lines = response.split("\r\n")
 
         # Handle HTTP Response Codes
@@ -120,14 +118,13 @@ class HttpHandler:
             for line in response_lines:
                 if line.find("Location") != -1:
                     # Extract redirect url from Location header
-                    redirect_url = line[line.find(":") + 2]
+                    redirect_url = line[line.find("://")+3:]
                     if redirect_url.find("odin.cs.uab.edu") == -1:
                         # url redirects outside of Odin
                         return None
 
-                    # Strip domain/port from request (five characters after the colon from the port number
-                    redirect_url = redirect_url[redirect_url.rfind(":") + 5:]
-                    return self.send_request(request, redirect_url)
+                    new_request = redirect_url[redirect_url.find("/"):]
+                    return self.send_request(type, new_request)
 
             # Didn't find a Location header
             return None
@@ -146,7 +143,7 @@ class HttpHandler:
 
         # Check for and store cookies
         for line in response_lines:
-            if line.find("Set-Cookie") != 0:
+            if line.find("Set-Cookie") != -1:
                 cookie_name = line[line.find(":") + 2:line.find("=")]
                 cookie_value = line[line.find("=") + 1:line.find(";")]
                 self.cookies[cookie_name] = cookie_value
@@ -159,23 +156,23 @@ class HttpHandler:
 
 if __name__ == "__main__":
     handler = HttpHandler(debug=True)
-    socket_status = handler.connect() # Implemented in case socket connect fails on first try
-    if not socket_status:
-        print("Failed to connect")
-    else:
-        # Test simple get
-        home_page = handler.send_request("GET", "/fakebook/")
-        if home_page is not None:
-            print(home_page)
 
-        # Test POST and params
-        main_menu = handler.send_request("POST", "")
-        if main_menu is not None:
-            print(main_menu)
+    # Test simple get
+    home_page = handler.send_request("GET", "/")
+    if home_page is not None:
+        print(home_page)
 
-        # Test GET with cookies
-        user_menu = handler.send_request("GET", "")
-        if user_menu is not None:
-            print(user_menu)
+    # Test a redirecting page
+    login_page = handler.send_request("GET", "/fakebook/")
+    if login_page is not None:
+        print(login_page)
 
-    handler.close()
+    # Test POST and params
+    # main_menu = handler.send_request("POST", "")
+    # if main_menu is not None:
+        # print(main_menu)
+
+    # Test GET with cookies
+    # user_menu = handler.send_request("GET", "")
+    # if user_menu is not None:
+        # print(user_menu)
