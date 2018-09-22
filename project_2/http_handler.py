@@ -54,15 +54,15 @@ class HttpHandler:
         return True
 
     # Sends a HTTP request over the connect
-    # type = either "GET" or "POST"
+    # request_type = either "GET" or "POST"
     # url = portion of URL AFTER the domain
     #   i.e. http://odin.cs.uab.edu:3001/fakebook/ -> /fakebook/
     #   it is the job of the person using this function to remove the domain
     #   and make sure the path exists on http://odin.cs.uab.edu:3001
-    #   URL parameters should be passed like "/fakebook/?user=hello&pass=there"
+    #   URL parameters should be passed like "/fakebook/?username=hello&password=there"
     # returns raw HTML response if successful
     # returns None if failed
-    def send_request(self, type, url):
+    def send_request(self, request_type, url):
         self._connect()
 
         body = None
@@ -71,7 +71,10 @@ class HttpHandler:
             body = url[url.find("?")+1:]
             url = url[:url.find("?")]
 
-        request = type + " " + url + " HTTP/1.1\r\n"
+        request = request_type + " " + url + " HTTP/1.1\r\n"
+        # User-Agent isn't needed, just for fun
+        request += \
+            "User-Agent: Mozilla/5.0 (compatible; HttpHandler/1.0; +http://group1.project2.cs334.cs.uab.edu)\r\n"
         # If there are saved cookies, add them to the request
         if len(self.cookies) != 0:
             request += "Cookie: "
@@ -114,6 +117,12 @@ class HttpHandler:
         self._close()
         response_lines = response.split("\r\n")
 
+        # Handle HTTP Response Codes
+        http_status = response_lines[0]
+        if http_status.find("HTTP") == -1:
+            # We didn't get a HTTP response
+            return None
+
         # Check for and store cookies
         for line in response_lines:
             if line.find("Set-Cookie") != -1:
@@ -121,14 +130,8 @@ class HttpHandler:
                 cookie_value = line[line.find("=") + 1:line.find(";")]
                 self.cookies[cookie_name] = cookie_value
 
-        # Handle HTTP Response Codes
-        http_status = response_lines[0]
-        if http_status.find("HTTP") == -1:
-            # We didn't get a HTTP response
-            return None
-
         if http_status.find("301") != -1 or http_status.find("302") != -1:
-            # Redirect by finding location header
+            # Redirect
             if self.debug:
                 print("encountered 301 Moved or 302 Found")
             for line in response_lines:
@@ -156,10 +159,10 @@ class HttpHandler:
             # Internal Server Error - Should retry
             if self.debug:
                 print("encountered 500 Internal Server Error")
-            return self.send_request(request, url)
+            return self.send_request(request_type, url)
 
         # Remove HTTP stuff from response for HTML parser
-        response = response[response.find("\r\n\r\n") + 5:]
+        response = response[response.find("<"):]
 
         return response
 
@@ -170,14 +173,12 @@ if __name__ == "__main__":
     # Test simple get
     home_page = handler.send_request("GET", "/")
     if home_page is not None:
-        # print(home_page)
-        pass
+        print(home_page)
 
     # Test a redirecting page
     login_page = handler.send_request("GET", "/fakebook/")
     if login_page is not None:
-        # print(login_page)
-        pass
+        print(login_page)
 
     # Get CSRF middleware token from login page
     token_identifier = "name='csrfmiddlewaretoken' value='"
@@ -192,8 +193,7 @@ if __name__ == "__main__":
     main_menu = handler.send_request("POST",
                                      "/accounts/login/?password=BMWTGME7&username=rofael&next=/fakebook/" + token)
     if main_menu is not None:
-        # print(main_menu)
-        pass
+        print(main_menu)
 
     # Test GET with cookies
     user_menu = handler.send_request("GET", "/fakebook/156714994/")
