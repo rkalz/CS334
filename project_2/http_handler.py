@@ -12,7 +12,6 @@ class HttpHandler:
         self.connected = False
 
         self.debug = debug
-        self.referer = None
 
     def set_debug(self, new_debug):
         self.debug = new_debug
@@ -86,8 +85,6 @@ class HttpHandler:
         if body is not None:
             request += "Content-Type: application/x-www-form-urlencoded\r\n" # Makes body look pretty in Wireshark
             request += "Content-Length: " + str(len(body)) + "\r\n" # Will otherwise send in chunks and WSGI no likey
-        if self.referer is not None:
-            request += "Referer: http://odin.cs.uab.edu:3001" + url + "\r\n"
         request += "\r\n"
         if body is not None:
             request += body
@@ -116,7 +113,13 @@ class HttpHandler:
 
         self._close()
         response_lines = response.split("\r\n")
-        self.referer = None
+
+        # Check for and store cookies
+        for line in response_lines:
+            if line.find("Set-Cookie") != -1:
+                cookie_name = line[line.find(":") + 3:line.find("=")]
+                cookie_value = line[line.find("=") + 1:line.find(";")]
+                self.cookies[cookie_name] = cookie_value
 
         # Handle HTTP Response Codes
         http_status = response_lines[0]
@@ -138,7 +141,6 @@ class HttpHandler:
 
                     new_request = redirect_url[redirect_url.find("/"):]
                     # Redirect is always GET
-                    self.referer = url
                     return self.send_request("GET", new_request)
 
             # Didn't find a Location header
@@ -155,13 +157,6 @@ class HttpHandler:
             if self.debug:
                 print("encountered 500 Internal Server Error")
             return self.send_request(request, url)
-
-        # Check for and store cookies
-        for line in response_lines:
-            if line.find("Set-Cookie") != -1:
-                cookie_name = line[line.find(":") + 3:line.find("=")]
-                cookie_value = line[line.find("=") + 1:line.find(";")]
-                self.cookies[cookie_name] = cookie_value
 
         # Remove HTTP stuff from response for HTML parser
         response = response[response.find("\r\n\r\n") + 5:]
@@ -193,14 +188,14 @@ if __name__ == "__main__":
         token = token[:token.find('\'')]
         token = "&csrfmiddlewaretoken=" + token
 
-    handler.set_debug(True)
     # Test POST and params
     main_menu = handler.send_request("POST",
                                      "/accounts/login/?password=BMWTGME7&username=rofael&next=/fakebook/" + token)
     if main_menu is not None:
-        print(main_menu)
+        # print(main_menu)
+        pass
 
     # Test GET with cookies
-    # user_menu = handler.send_request("GET", "")
-    # if user_menu is not None:
-        # print(user_menu)
+    user_menu = handler.send_request("GET", "/fakebook/156714994/")
+    if user_menu is not None:
+        print(user_menu)
