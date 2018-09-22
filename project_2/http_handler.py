@@ -71,7 +71,8 @@ class HttpHandler:
             body = url[url.find("?")+1:]
             url = url[:url.find("?")]
 
-        request = request_type + " " + url + " HTTP/1.1\r\n"
+        # Build the header
+        request = request_type + " " + url + " HTTP/1.0\r\n"
         # User-Agent isn't needed, just for fun
         request += \
             "User-Agent: Mozilla/5.0 (compatible; HttpHandler/1.0; +http://group1.project2.cs334.cs.uab.edu)\r\n"
@@ -86,9 +87,12 @@ class HttpHandler:
             request = request[:len(request)-2]
             request += "\r\n"
         if body is not None:
-            request += "Content-Type: application/x-www-form-urlencoded\r\n" # Makes body look pretty in Wireshark
-            request += "Content-Length: " + str(len(body)) + "\r\n" # Will otherwise send in chunks and WSGI no likey
-        request += "\r\n"
+            if self.debug:
+                request += "Content-Type: application/x-www-form-urlencoded\r\n"  # Makes body look pretty in Wireshark
+            request += "Content-Length: " + str(len(body)) + "\r\n"  # Will otherwise send in chunks
+        request += "\r\n"                                            # (HTTP/1.0 doesn't support chunks)
+
+        # Add body to request if present
         if body is not None:
             request += body
 
