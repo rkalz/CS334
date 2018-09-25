@@ -24,7 +24,7 @@ class HttpHandler:
             return False
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.settimeout(30)
+        self.socket.settimeout(1)
 
         try:
             self.socket.connect((self.host, self.port))
@@ -72,12 +72,13 @@ class HttpHandler:
             url = url[:url.find("?")]
 
         # Build the header
-        request = request_type + " " + url + " HTTP/1.0\r\n"
+        request = request_type + " " + url + " HTTP/1.1\r\n"
         # User-Agent isn't needed, just for fun
         request += \
             "User-Agent: Mozilla/5.0 (compatible; HttpHandler/1.0; +http://group1.project2.cs334.cs.uab.edu)\r\n"
-        request += \
-            "Host: odin.cs.uab.edu:3001\r\n"
+        request += "Host: odin.cs.uab.edu:3001\r\n"
+        request += "Connection: close\r\n"
+
         # If there are saved cookies, add them to the request
         if len(self.cookies) != 0:
             request += "Cookie: "
