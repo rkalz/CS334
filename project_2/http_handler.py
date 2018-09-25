@@ -120,7 +120,7 @@ class HttpHandler:
                 raw_response = raw_response.decode()
                 response += raw_response
 
-                if raw_response.find("</html>") != -1:
+                if raw_response.find("0\r\n\r\n") != -1:
                     break
 
                 raw_response = self.socket.recv(1024)
