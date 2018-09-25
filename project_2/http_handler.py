@@ -80,7 +80,7 @@ class HttpHandler:
         request += \
             "User-Agent: Mozilla/5.0 (compatible; HttpHandler/1.0; +http://group1.project2.cs334.cs.uab.edu)\r\n"
         request += "Host: odin.cs.uab.edu:3001\r\n"
-        request += "Connection: close\r\n"
+        request += "Connection: keep-alive\r\n"
 
         # If there are saved cookies, add them to the request
         if len(self.cookies) != 0:
