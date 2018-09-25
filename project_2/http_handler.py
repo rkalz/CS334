@@ -76,6 +76,8 @@ class HttpHandler:
         # User-Agent isn't needed, just for fun
         request += \
             "User-Agent: Mozilla/5.0 (compatible; HttpHandler/1.0; +http://group1.project2.cs334.cs.uab.edu)\r\n"
+        request += \
+            "Host: odin.cs.uab.edu:3001\r\n"
         # If there are saved cookies, add them to the request
         if len(self.cookies) != 0:
             request += "Cookie: "
@@ -94,6 +96,7 @@ class HttpHandler:
 
         # Add body to request if present
         if body is not None:
+            body = body.replace('+', '%2B')
             request += body
 
         # Encode and send request, return False if socket fails
@@ -130,7 +133,7 @@ class HttpHandler:
         # Check for and store cookies
         for line in response_lines:
             if line.find("Set-Cookie") != -1:
-                cookie_name = line[line.find(":") + 3:line.find("=")]
+                cookie_name = line[line.find(":") + 2:line.find("=")]
                 cookie_value = line[line.find("=") + 1:line.find(";")]
                 self.cookies[cookie_name] = cookie_value
 
@@ -142,7 +145,7 @@ class HttpHandler:
                 if line.find("Location") != -1:
                     # Extract redirect url from Location header
                     redirect_url = line[line.find("://")+3:]
-                    if redirect_url.find("odin.cs.uab.edu") == -1:
+                    if redirect_url.find("odin.cs.uab.edu") == -1 and redirect_url.find("localhost") == -1:
                         # url redirects outside of Odin
                         return None
 
@@ -172,34 +175,32 @@ class HttpHandler:
 
 
 if __name__ == "__main__":
-    handler = HttpHandler()
+    handler = HttpHandler(True)
 
-    # Test simple get
-    home_page = handler.send_request("GET", "/")
-    if home_page is not None:
-        print(home_page)
-
-    # Test a redirecting page
-    login_page = handler.send_request("GET", "/fakebook/")
+    # Test a get
+    login_page = handler.send_request("GET", "/accounts/login")
     if login_page is not None:
         print(login_page)
 
-    # Get CSRF middleware token from login page
-    token_identifier = "name='csrfmiddlewaretoken' value='"
+    # Get authenticity token from login page
+    token_identifier = "name=\"authenticity_token\" value=\""
     token_start = login_page.find(token_identifier)
     token = ""
     if token_start != -1:
-        token = login_page[token_start + len(token_identifier):]
-        token = token[:token.find('\'')]
-        token = "&csrfmiddlewaretoken=" + token
+        auth_token = login_page[token_start + len(token_identifier):]
+        auth_token = auth_token[:auth_token.find("\"")]
+        token += "&authenticity_token=" + auth_token
 
     # Test POST and params
-    main_menu = handler.send_request("POST",
-                                     "/accounts/login/?password=BMWTGME7&username=rofael&next=/fakebook/" + token)
+    main_menu = None
+    if token != "":
+        main_menu = handler.send_request("POST",
+                                         "/accounts/login/?login[password]=BMWTGME7&login[email]=rofael" + token)
     if main_menu is not None:
         print(main_menu)
 
     # Test GET with cookies
-    user_menu = handler.send_request("GET", "/fakebook/156714994/")
-    if user_menu is not None:
-        print(user_menu)
+    if main_menu is not None:
+        user_menu = handler.send_request("GET", "/fakebook/156714994/")
+        if user_menu is not None:
+            print(user_menu)
