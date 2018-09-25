@@ -19,12 +19,12 @@ class HttpHandler:
     # Connects to Odin on port 3001
     # Returns true if successful, otherwise false
     # Needed just in case connection fails
-    def _connect(self):
+    def connect(self):
         if self.connected:
             return False
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.settimeout(1)
+        self.socket.settimeout(10)
 
         try:
             self.socket.connect((self.host, self.port))
@@ -38,7 +38,7 @@ class HttpHandler:
 
     # Close the socket when done
     # Returns true if successful, otherwise false
-    def _close(self):
+    def close(self):
         if not self.connected:
             return False
 
@@ -63,7 +63,10 @@ class HttpHandler:
     # returns raw HTML response if successful
     # returns None if failed
     def send_request(self, request_type, url):
-        self._connect()
+        if not self.connected:
+            if self.debug:
+                print("Not connected. Make sure to use connect()")
+            return None
 
         body = None
         if url.find("?") != -1:
@@ -113,16 +116,19 @@ class HttpHandler:
         try:
             response = ""
             raw_response = self.socket.recv(1024)
-            while len(raw_response) > 0:
+            while True:
                 raw_response = raw_response.decode()
                 response += raw_response
+
+                if raw_response.find("</html>") != -1:
+                    break
+
                 raw_response = self.socket.recv(1024)
         except Exception as e:
             if self.debug:
                 print("failed to read response from socket: " + str(e))
             return None
 
-        self._close()
         response_lines = response.split("\r\n")
 
         # Handle HTTP Response Codes
@@ -170,13 +176,15 @@ class HttpHandler:
             return self.send_request(request_type, url)
 
         # Remove HTTP stuff from response for HTML parser
-        response = response[response.find("<"):]
+        response = response[response.find("<"):response.rfind(">")+1]
 
         return response
 
 
 if __name__ == "__main__":
     handler = HttpHandler(True)
+
+    handler.connect()
 
     # Test a get
     login_page = handler.send_request("GET", "/accounts/login")
@@ -205,3 +213,5 @@ if __name__ == "__main__":
         user_menu = handler.send_request("GET", "/fakebook/156714994/")
         if user_menu is not None:
             print(user_menu)
+
+    handler.close()
