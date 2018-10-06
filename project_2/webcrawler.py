@@ -35,14 +35,20 @@ class WebCrawler:
     def clean(self, list):
         cleaned = []
         for index, link in enumerate(list[0]):
-            if list[0][index][0:10] == '/fakebook/':
+            if list[0][index][0:9] == '/fakebook':
                 cleaned.append(list[0][index])
         return cleaned
 
     def crawl(self, list, http, html):
-        page = HttpHandler.send_request(http, "GET", list[0])
-        page_parsed = html.parseHtml(page)
-        return self.clean(page_parsed)
+        visited = []
+        for index, link in enumerate(list):
+            page = HttpHandler.send_request(http, "GET", list[index])
+            visited.append(list[index])
+            page_parsed = html.parseHtml(page)
+            if len(page_parsed[1]) != 0:
+                for index, flag in enumerate(page_parsed[1]):
+                    self.flags.append(page_parsed[1][index])
+            return self.clean(page_parsed), visited
 
 if __name__ == "__main__":
     http = HttpHandler(False)
@@ -51,5 +57,20 @@ if __name__ == "__main__":
     crawler = WebCrawler()
     main_menu = crawler.connect(http, html)
     initial = crawler.clean(main_menu)
+
     collected = crawler.crawl(initial, http, html)
+    visited = []
+    unvisited = []
     
+    while(len(crawler.flags) <= 5):
+        if len(collected[0]) > 0:
+            if collected[0][-1] not in visited:   
+                html_page = http.send_request("GET", collected[0][-1])
+                parsed_page = html.parseHtml(html_page)
+                visited.append(collected[0][-1])
+                print('Flags:')
+                print(parsed_page[1])
+                del collected[0][-1]
+                print('---')
+                print(collected[0])
+                print(visited)
