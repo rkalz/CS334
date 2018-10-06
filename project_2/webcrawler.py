@@ -42,8 +42,7 @@ class WebCrawler:
     def crawl(self, list, http, html):
         page = HttpHandler.send_request(http, "GET", list[0])
         page_parsed = html.parseHtml(page)
-        print(page_parsed[0])
-        page_parsed_cleaned = self.clean(page_parsed)
+        return self.clean(page_parsed)
 
 if __name__ == "__main__":
     http = HttpHandler(False)
@@ -53,3 +52,4 @@ if __name__ == "__main__":
     main_menu = crawler.connect(http, html)
     initial = crawler.clean(main_menu)
     collected = crawler.crawl(initial, http, html)
+    
