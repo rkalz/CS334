@@ -1,15 +1,19 @@
 from http_handler import HttpHandler
-from html_parser import HtmlHandler
+from html.parser import HTMLParser
 import sys
 
 class WebCrawler:
 
-    def __init__(self):
-        self.flags = []
+    def __init__(self, http, html):
+        self.http = http
+        self.html = html
+        self.init = None
         self.visited = []
-        self.unvisited = []
+        self.visiting = None
+        self.toVisit = []
+        self.flags = []
     
-    def connect(self, http, html):
+    def connect(self):
         # Username and password from commandline
         user = sys.argv[1]
         password = sys.argv[2]
@@ -29,33 +33,87 @@ class WebCrawler:
             main_menu = http.send_request("POST", "/accounts/login/?login[password]=" + password + "&login[email]=" + user + token)
         else:
             print("You need to login!")
+        
+        html.feed(main_menu)
+        self.init = html.output
 
-        return html.parseHtml(main_menu)
-    
-    def clean(self, list):
+    def initialClean(self):
+        # Removes everything in initial array that isn't leading to fakebook
         cleaned = []
-        for index, link in enumerate(list[0]):
-            if list[0][index][0:9] == '/fakebook':
-                cleaned.append(list[0][index])
-        return cleaned
+        for index, link in enumerate(self.init):
+            if self.init[index][0:9] == '/fakebook':
+                cleaned.append(self.init[index])
+        self.init = cleaned
 
-    def crawl(self, list, http, html):
-        visited = []
-        for index, link in enumerate(list):
-            page = HttpHandler.send_request(http, "GET", list[index])
-            visited.append(list[index])
-            page_parsed = html.parseHtml(page)
-            if len(page_parsed[1]) != 0:
-                for index, flag in enumerate(page_parsed[1]):
-                    self.flags.append(page_parsed[1][index])
-            return self.clean(page_parsed), visited
+    # Post initial setup methods
+    def crawl(self, link):
+        htmlToParse = HttpHandler.send_request(http, "GET", link)
+        return htmlToParse
+
+    def parse(self, rawHtml):
+        parsed = html.feed(rawHtml)
+        return parsed
+    
+    def clean(self, links):
+        cleaned_links = []
+        for index, link in enumerate(links):
+            if links[index][0:9] == '/fakebook':
+                cleaned_links.append(links[index])
+        return cleaned_links
+
+class HTMLHandler(HTMLParser):
+    def __init__(self, output=[]):
+        HTMLParser.__init__(self)
+        self.output = output
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'a':
+            link = dict(attrs).get('href')
+            self.output.append(link)
 
 if __name__ == "__main__":
+    # Initial setup
     http = HttpHandler(False)
-    html = HtmlHandler()
+    html = HTMLHandler()
+    crawler = WebCrawler(http, html)
+    crawler.connect()
+    crawler.initialClean()
+    html.output = []
 
-    crawler = WebCrawler()
-    main_menu = crawler.connect(http, html)
-    initial = crawler.clean(main_menu)
+    # Prep for loop
+    crawler.toVisit = crawler.init
+    
+    while len(crawler.toVisit) > 0:
+        crawler.visiting = crawler.toVisit[-1]
+        crawler.visited.append(crawler.visiting)
+        del crawler.toVisit[-1]
 
-    collected = crawler.crawl(initial, http, html)
+        rawHtml = crawler.crawl(crawler.visiting)
+        html.feed(rawHtml)
+        parsedHtml = html.output
+        html.output = []
+        cleanedHtml = crawler.clean(parsedHtml)
+
+        for index, link in enumerate(cleanedHtml):
+            if cleanedHtml[index] not in crawler.visited:
+                if cleanedHtml[index] not in crawler.toVisit:
+                    crawler.toVisit.append(cleanedHtml[index])    
+
+        print('toVisit remaining:')
+        print(len(crawler.toVisit))
+        print('Visited links:')
+        print(len(crawler.visited))
+
+    """ # Testing
+    print('init:')
+    print(crawler.init)
+    print('visited:')
+    print(crawler.visited)
+    print('visiting')
+    print(crawler.visiting)
+    print('toVisit')
+    print(crawler.toVisit)
+    # Resetting html
+    html.output = []
+    print('html output')
+    print(html.output) """
