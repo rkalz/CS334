@@ -35,7 +35,7 @@ class WebCrawler:
             print("You need to login!")
         
         html.feed(main_menu)
-        self.init = html.output
+        self.init = html.links
 
     def initialClean(self):
         # Removes everything in initial array that isn't leading to fakebook
@@ -62,14 +62,19 @@ class WebCrawler:
         return cleaned_links
 
 class HTMLHandler(HTMLParser):
-    def __init__(self, output=[]):
+    def __init__(self, links=[], flags=[]):
         HTMLParser.__init__(self)
-        self.output = output
+        self.links = links
+        self.flags = flags
 
     def handle_starttag(self, tag, attrs):
         if tag == 'a':
             link = dict(attrs).get('href')
-            self.output.append(link)
+            self.links.append(link)
+    def handle_data(self, data):
+        if data[0:5] == "FLAG:":
+            flags.append(data)
+            
 
 if __name__ == "__main__":
     # Initial setup
@@ -78,42 +83,40 @@ if __name__ == "__main__":
     crawler = WebCrawler(http, html)
     crawler.connect()
     crawler.initialClean()
-    html.output = []
+    html.links = []
 
     # Prep for loop
     crawler.toVisit = crawler.init
     
-    while len(crawler.toVisit) > 0:
+    while len(crawler.flags) < 5:
         crawler.visiting = crawler.toVisit[-1]
         crawler.visited.append(crawler.visiting)
         del crawler.toVisit[-1]
 
         rawHtml = crawler.crawl(crawler.visiting)
-        html.feed(rawHtml)
-        parsedHtml = html.output
-        html.output = []
+        if rawHtml != None:
+            html.feed(rawHtml)
+        parsedHtml = html.links
+        html.links = []
         cleanedHtml = crawler.clean(parsedHtml)
+        flags = html.flags
+        html.flags = []
+
+        for index, flag in flags:
+            crawler.flags.append(flags[index])
 
         for index, link in enumerate(cleanedHtml):
             if cleanedHtml[index] not in crawler.visited:
                 if cleanedHtml[index] not in crawler.toVisit:
                     crawler.toVisit.append(cleanedHtml[index])    
 
-        print('toVisit remaining:')
+        # Tester prints
+        """ print('toVisit remaining:')
         print(len(crawler.toVisit))
         print('Visited links:')
         print(len(crawler.visited))
-
-    """ # Testing
-    print('init:')
-    print(crawler.init)
-    print('visited:')
-    print(crawler.visited)
-    print('visiting')
-    print(crawler.visiting)
-    print('toVisit')
-    print(crawler.toVisit)
-    # Resetting html
-    html.output = []
-    print('html output')
-    print(html.output) """
+        print('Flags:')
+        print(len(crawler.flags))
+        print(crawler.flags) """
+        
+    print(crawler.flags)
