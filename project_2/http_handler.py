@@ -203,8 +203,7 @@ if __name__ == "__main__":
     # Test POST and params
     main_menu = None
     if token != "":
-        main_menu = handler.send_request("POST",
-                                         "/accounts/login/?login[password]=BMWTGME7&login[email]=rofael" + token)
+        main_menu = handler.send_request("POST", "/accounts/login/?login[password]=BMWTGME7&login[email]=rofael" + token)
     if main_menu is not None:
         print(main_menu)
 

@@ -31,28 +31,36 @@ else:
     print("You need to login!")
 
 web_page = html.parseHtml(main_menu)
-i = 1
+
 while(len(flags) < 5):
-    if len(web_page[0]) == 0 and len(web_page[1]) == 0:
-        i = i + 1
-        print(i)
+    if (not web_page[0]) and (not web_page[1]):
+        print(1)
         if "/fakebook" in frontier[0]:
+            print(2)
             web_page = html.parseHtml(http.send_request("GET", frontier[0]))
             metropolis.append(frontier[0])
             frontier.remove(frontier[0])
+            continue
         else:
             print(2)
             metropolis.append(frontier[0])
             frontier.remove(frontier[0])
-    if len(web_page[0]) > 0:
-        if web_page[0][0] not in frontier and web_page[0][0] not in metropolis:
+            continue
+    if (web_page[0]) or (web_page[1]):
+        print(3)
+        print(web_page)
+        if (web_page[0][0] not in frontier) and (web_page[0][0] not in metropolis):
+            print(4)
+            print("4", web_page)
             frontier.append(web_page[0][0])
             web_page[0].remove(web_page[0][0])
-        if len(web_page[1]) > 0:
+            print("4.5", web_page)
+        else:
+            web_page[0].remove(web_page[0][0])
+        if web_page[1]:
+            print(5)
             flags.append(web_page[1][0])
             web_page[1].remove(web_page[1][0])
-        if len(web_page[0]) > 0:
-            web_page[0].remove(web_page[0][0])
         
 
 print(frontier)
