@@ -34,10 +34,15 @@ web_page = html.parseHtml(main_menu)
 
 while(len(flags) < 5):
     if (not web_page[0]) and (not web_page[1]):
+        print('the web page')
+        print(web_page)
         print(1)
         if "/fakebook" in frontier[0]:
+            print('the frontier')
+            print(frontier)
             print(2)
-            web_page = html.parseHtml(http.send_request("GET", frontier[0]))
+            html_page = http.send_request("GET", frontier[0])
+            web_page = html.parseHtml(html_page)
             metropolis.append(frontier[0])
             frontier.remove(frontier[0])
             continue
