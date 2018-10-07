@@ -1,19 +1,17 @@
 class HtmlHandler:
-def parseHtml(self, html):
-    from bs4 import BeautifulSoup, SoupStrainer
-    soup = BeautifulSoup(html, 'html.parser')
+    def parseHtml(self, html):
+        from bs4 import BeautifulSoup, SoupStrainer
+        soup = BeautifulSoup(html, 'html.parser')
 
-    links = []
-    flags = []
-
-    for link in soup.find_all('a', href=True):
-        links.append(link['href'])
-        print(links)
-    for line in soup.find_all('h3',attrs={"class" : "secret_flag"}):
-        flags.append(line.text)
-        print(flags)
-    
-    return links, flags
+        links = []
+        flags = []
+        if html != None:
+            for link in soup.find_all('a', href=True):
+                links.append(link['href'])
+            for line in soup.find_all('h3',attrs={"class" : "secret_flag"}):
+                flags.append(line.text)
+        
+        return links, flags
 
 # Tests
 if __name__ == "__main__":
