@@ -54,6 +54,6 @@ while(len(flags) < 5):
         if web_page[1]:
             flags.append(web_page[1][0])
             web_page[1].remove(web_page[1][0])
-        
-for index, flag in enumerate(flags):
-    print(flag[index])
+
+for flag in flags:
+    print(flag)
