@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from http_handler import HttpHandler
 from html_parser import HtmlHandler
 import sys

@@ -1,6 +1,6 @@
 class HtmlHandler:
     def parseHtml(self, html):
-        from bs4 import BeautifulSoup, SoupStrainer
+        from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, 'html.parser')
 
         links = []
