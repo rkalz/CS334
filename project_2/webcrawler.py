@@ -33,6 +33,7 @@ else:
 web_page = html.parseHtml(main_menu)
 
 while(len(flags) < 5):
+#Goes to new web pages to find new links and flags
     if (not web_page[0]) and (not web_page[1]):
         if "/fakebook" in frontier[0]:
             html_page = http.send_request("GET", frontier[0])
@@ -45,6 +46,7 @@ while(len(flags) < 5):
             metropolis.append(frontier[0])
             frontier.remove(frontier[0])
             continue
+#Adds web pages into frontier and checks for flags
     if (web_page[0]) or (web_page[1]):
         if (web_page[0][0] not in frontier) and (web_page[0][0] not in metropolis):
             frontier.append(web_page[0][0])
@@ -55,5 +57,6 @@ while(len(flags) < 5):
             flags.append(web_page[1][0])
             web_page[1].remove(web_page[1][0])
 
+#Prints flags
 for flag in flags:
     print(flag)
