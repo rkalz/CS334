@@ -1,5 +1,3 @@
-NEEDS UPDATING!
-
 How to run:
 python3 webcrawler.py <username> <password>
 ./webcrawler.py <username> <password>
@@ -16,6 +14,12 @@ Cookies would then be updated, and the appropriate action would be made based on
 return None, return the HTML response)
 
 HTML Handler: HTML Handler recieved any HTML given to it's parsing functions and sorted through it to extract all the links and the flags. It then returned an array of each which allowed the program to function.
+
+Webcrawler: The approach that was taken with the webcrawler, was that it would make a get request by using the HTTP Handler.
+After the get request is made, it then sends the recieved html to the HTML Parser to remove everything but links and flags. Once 
+the list of links were recieved, the webcrawler compairs each link to an array of links that have been visited and an array of links that have not.
+If the link had been visited, then it just deletes the link. But if it hasn't, then it would add it to the unvisited array.
+Then after all of the new links have been sorted, it would then request new links.
 
 Difficulties:
 HTTP Handler: There were several difficulties involved with writing the HTTP handler. With the original Flask(?) server,
@@ -34,6 +38,9 @@ with "%2B", which fixed that issue.
 
 HTML Handler: At first I used the python html.parser library but it proved to be inadequate for finding flags or links. The way it functioned was not ideal for a use case where it would be given large amounts of HTML and need to return very specific data. BeautifulSoup solved this issue by providing easier to use functions that could sift through the large amount of data in a better way. I also had to account for None returned from the HTTP Handler which caused the program to crash at first.
 
+Webcrawler: The biggest diffulty that was faced while building the webcrawler, was remembering Python syntax. After remembering Python syntax,
+the next issue was just ordering the IF statements properly.
+
 Testing:
 HTTP Handler: Three test cases were devised to ensure that the HTTP handler was working. The first was a simple GET
 request, to ensure that the socket was correctly sending requests, reading responses, and properly
@@ -45,3 +52,5 @@ was used to monitor any network activity that might not be evident in the respon
 
 HTML Handler: The simple test case in __main__ confirms that it will return data from the appropriate tags.
 
+Webcrawler: Testing the webcrawler was simple because after it was verified that that while loop was handling the new links and flags properly, all that 
+needed to be done was print the five flags found. If five flags were printed, then the project was complete and the webcrawler works.
