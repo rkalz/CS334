@@ -9,10 +9,14 @@ class HttpHandler:
 
         self.host = "odin.cs.uab.edu"
         self.port = 3001
+        self.headers = dict()
         self.cookies = dict()
         self.connected = False
 
         self.debug = debug
+
+    def add_header(self, key, value):
+        self.headers[key] = value
 
     def set_debug(self, new_debug):
         self.debug = new_debug
@@ -69,14 +73,14 @@ class HttpHandler:
                 print("Not connected. Make sure to use connect()")
             return None
 
-        json_string = None
-        try:
-            json_string = json.dumps(json_dict)
-        except Exception as e:
-            if self.debug:
-                print("failed to parse dictionary: " + str(e))
-            return None
-
+        json_string = ""
+        if json_dict is not None:
+            try:
+                json_string = json.dumps(json_dict)
+            except Exception as e:
+                if self.debug:
+                    print("failed to parse dictionary: " + str(e))
+                return None
 
         # Build the header
         request = request_type + " " + url + " HTTP/1.1\r\n"
@@ -87,6 +91,8 @@ class HttpHandler:
         request += "Connection: keep-alive\r\n"
         request += "Content-Type: application/json\r\n"
         request += "Content-Length: " + str(len(json_string)) + "\r\n"
+        for key, value in self.headers.items():
+            request += key + ": " + value + "\r\n"
 
         # If there are saved cookies, add them to the request
         if len(self.cookies) != 0:
@@ -161,10 +167,10 @@ class HttpHandler:
             # Didn't find a Location header
             return None
 
-        if http_status.find("403") != -1 or http_status.find("404") != -1:
+        if http_status.find("401") != -1 or http_status.find("403") != -1 or http_status.find("404") != -1:
             # Forbidden or Not Found - Stop looking
             if self.debug:
-                print("encountered 403 Forbidden or 404 Not Found")
+                print("encountered 401 Unauthorized, 403 Forbidden or 404 Not Found")
             return None
 
         if http_status.find("500") != -1:
@@ -173,7 +179,7 @@ class HttpHandler:
                 print("encountered 500 Internal Server Error")
             return self.send_request(request_type, url, json_dict)
 
-        # Strip HTTP header, 1.1
+        # Strip HTTP header, 1.1 byte denotations
         response = response[response.find("\r\n\r\n")+4:]
         response = response[:response.find("0\r\n\r\n")]
         response = response[response.find('{'):response.rfind('}')+1]
@@ -185,10 +191,16 @@ if __name__ == "__main__":
 
     handler.connect()
 
-    auth = dict()
-    auth["email"] = "rofael@uab.edu"
-    auth["password"] = "24QM6tTz"
-    auth["grant_type"] = "password"
+    auth = {
+        "email": "rofael@uab.edu",
+        "password": "24QM6tTz",
+        "grant_type": "password"
+    }
     auth_result = handler.send_request("POST", "/oauth/token", auth)
+    print(auth_result)
+
+    handler.add_header("Authorization", auth_result["token_type"] + " " + auth_result["access_token"])
+    bind_to_graph = handler.send_request("POST", "/api/v1/crawl_sessions/1", None)
+    print(bind_to_graph)
 
     handler.close()
