@@ -14,7 +14,7 @@ class HttpHandler:
         self.headers = dict()
         # User-Agent isn't needed, just for fun
         self.add_header("User-Agent",
-                        "Mozilla/5.0 (compatible; HttpHandler/1.1; +http://groupX.project3.cs334.cs.uab.edu)")
+                        "Mozilla/5.0 (compatible; HttpHandler/1.1; +http://group1.project3.cs334.cs.uab.edu)")
         self.add_header("Host", "odin.cs.uab.edu:3001")
         self.add_header("Connection", "keep-alive")
         self.add_header("Content-Type", "application/json")
@@ -55,15 +55,17 @@ class HttpHandler:
         if not self.connected:
             return False
 
+        ending_socket = self.socket
+        self.socket = None
+        self.connected = False
+
         try:
-            self.socket.close()
+            ending_socket.close()
         except Exception as e:
             if self.debug:
                 print("failed to close socket: " + str(e))
             return False
 
-        self.socket = None
-        self.connected = False
         return True
 
     # Sends a HTTP request over the connect
@@ -127,6 +129,7 @@ class HttpHandler:
                     break
 
                 raw_response = self.socket.recv(1024)
+
         except Exception as e:
             if self.debug:
                 print("failed to read response from socket: " + str(e))
@@ -144,8 +147,8 @@ class HttpHandler:
         for line in response_lines:
             if "Set-Cookie" in line:
                 assignment_pos = line.find('=')
-                cookie_name = line[line.find(":") + 2:assignment_pos]
-                cookie_value = line[assignment_pos + 1:line.find(";")]
+                cookie_name = line[line.find(':') + 2:assignment_pos]
+                cookie_value = line[assignment_pos + 1:line.find(';')]
                 self.cookies[cookie_name] = cookie_value
 
         if "301" in http_status or "302" in http_status:
@@ -182,8 +185,7 @@ class HttpHandler:
             return self.send_request(request_type, url, json_dict)
 
         # Strip HTTP header, 1.1 byte denotations
-        response = response[response.find("\r\n\r\n")+4:]
-        response = response[:response.find("0\r\n\r\n")]
+        response = response[response.find("\r\n\r\n")+4:response.rfind("0\r\n\r\n")]
         response = response[response.find('{'):response.rfind('}')+1]
         try:
             return json.loads(response)
