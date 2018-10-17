@@ -100,14 +100,11 @@ class HttpHandler:
         if len(self.cookies) != 0:
             request += "Cookie: "
             for key, val in self.cookies.items():
-                request += key
-                request += "="
-                request += val
-                request += "; "
-            request = request[:-2]
-            request += "\r\n"
-        request += "\r\n"
-        request += json_string
+                request += key + '=' + val + "; "
+            request = request[:-2] + "\r\n"
+
+        # End the header and add the body
+        request += "\r\n" + json_string
 
         # Encode and send request, return False if socket fails
         request = request.encode()
@@ -126,7 +123,7 @@ class HttpHandler:
                 raw_response = raw_response.decode()
                 response += raw_response
 
-                if raw_response.find("0\r\n\r\n") != -1:
+                if "0\r\n\r\n" in raw_response:
                     break
 
                 raw_response = self.socket.recv(1024)
@@ -139,43 +136,46 @@ class HttpHandler:
 
         # Handle HTTP Response Codes
         http_status = response_lines[0]
-        if http_status.find("HTTP") == -1:
+        if "HTTP" not in http_status:
             # We didn't get a HTTP response
             return None
 
         # Check for and store cookies
         for line in response_lines:
-            if line.find("Set-Cookie") != -1:
-                cookie_name = line[line.find(":") + 2:line.find("=")]
-                cookie_value = line[line.find("=") + 1:line.find(";")]
+            if "Set-Cookie" in line:
+                assignment_pos = line.find('=')
+                cookie_name = line[line.find(":") + 2:assignment_pos]
+                cookie_value = line[assignment_pos + 1:line.find(";")]
                 self.cookies[cookie_name] = cookie_value
 
-        if http_status.find("301") != -1 or http_status.find("302") != -1:
+        if "301" in http_status or "302" in http_status:
             # Redirect
             if self.debug:
                 print("encountered 301 Moved or 302 Found")
             for line in response_lines:
-                if line.find("Location") != -1:
+                if "Location" in line:
                     # Extract redirect url from Location header
                     redirect_url = line[line.find("://")+3:]
-                    if redirect_url.find("odin.cs.uab.edu") == -1 and redirect_url.find("localhost") == -1:
+                    if "odin.cs.uab.edu" not in redirect_url:
                         # url redirects outside of Odin
+                        if self.debug:
+                            print("Tried to redirect outside of odin: " + redirect_url)
                         return None
 
-                    new_request = redirect_url[redirect_url.find("/"):]
+                    new_request = redirect_url[redirect_url.find('/'):]
                     # Redirect is always GET
                     return self.send_request("GET", new_request, json_dict)
 
             # Didn't find a Location header
             return None
 
-        if http_status.find("401") != -1 or http_status.find("403") != -1 or http_status.find("404") != -1:
+        if "401" in http_status or "403" in http_status or "404" in http_status:
             # Forbidden or Not Found - Stop looking
             if self.debug:
                 print("encountered 401 Unauthorized, 403 Forbidden or 404 Not Found")
             return None
 
-        if http_status.find("500") != -1:
+        if "500" in http_status:
             # Internal Server Error - Should retry
             if self.debug:
                 print("encountered 500 Internal Server Error")
@@ -185,7 +185,12 @@ class HttpHandler:
         response = response[response.find("\r\n\r\n")+4:]
         response = response[:response.find("0\r\n\r\n")]
         response = response[response.find('{'):response.rfind('}')+1]
-        return json.loads(response)
+        try:
+            return json.loads(response)
+        except Exception as e:
+            if self.debug:
+                print("Failed to parse JSON response: " + str(e))
+            return None
 
 
 if __name__ == "__main__":
