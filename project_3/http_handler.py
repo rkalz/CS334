@@ -9,9 +9,17 @@ class HttpHandler:
 
         self.host = "odin.cs.uab.edu"
         self.port = 3001
-        self.headers = dict()
-        self.cookies = dict()
         self.connected = False
+
+        self.headers = dict()
+        # User-Agent isn't needed, just for fun
+        self.add_header("User-Agent",
+                        "Mozilla/5.0 (compatible; HttpHandler/1.1; +http://groupX.project3.cs334.cs.uab.edu)")
+        self.add_header("Host", "odin.cs.uab.edu:3001")
+        self.add_header("Connection", "keep-alive")
+        self.add_header("Content-Type", "application/json")
+
+        self.cookies = dict()
 
         self.debug = debug
 
@@ -84,13 +92,7 @@ class HttpHandler:
 
         # Build the header
         request = request_type + " " + url + " HTTP/1.1\r\n"
-        # User-Agent isn't needed, just for fun
-        request += \
-            "User-Agent: Mozilla/5.0 (compatible; HttpHandler/1.1; +http://groupX.project3.cs334.cs.uab.edu)\r\n"
-        request += "Host: odin.cs.uab.edu:3001\r\n"
-        request += "Connection: keep-alive\r\n"
-        request += "Content-Type: application/json\r\n"
-        request += "Content-Length: " + str(len(json_string)) + "\r\n"
+        self.add_header("Content-Length", str(len(json_string)))
         for key, value in self.headers.items():
             request += key + ": " + value + "\r\n"
 
@@ -102,7 +104,7 @@ class HttpHandler:
                 request += "="
                 request += val
                 request += "; "
-            request = request[:len(request)-2]
+            request = request[:-2]
             request += "\r\n"
         request += "\r\n"
         request += json_string
