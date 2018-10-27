@@ -201,15 +201,12 @@ if __name__ == "__main__":
     handler.connect()
 
     auth = {
-        "email": "rofael@uab.edu",
-        "password": "24QM6tTz",
+        "email": "lazrak13@uab.edu",
+        "password": "ecBA8sbo",
         "grant_type": "password"
     }
     auth_result = handler.send_request("POST", "/oauth/token", auth)
-    print(auth_result)
-
     handler.add_header("Authorization", auth_result["token_type"] + " " + auth_result["access_token"])
     bind_to_graph = handler.send_request("POST", "/api/v1/crawl_sessions/1", None)
-    print(bind_to_graph)
 
     handler.close()
