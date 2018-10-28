@@ -43,7 +43,7 @@ class HttpHandler:
             self.socket.connect((self.host, self.port))
         except Exception as e:
             if self.debug:
-                print("failed to connect to socket: " + str(e))
+                print("HttpHandler: failed to connect to socket: " + str(e))
             return False
 
         self.connected = True
@@ -63,7 +63,7 @@ class HttpHandler:
             ending_socket.close()
         except Exception as e:
             if self.debug:
-                print("failed to close socket: " + str(e))
+                print("HttpHandler: failed to close socket: " + str(e))
             return False
 
         return True
@@ -80,7 +80,7 @@ class HttpHandler:
     def send_request(self, request_type, url, json_dict):
         if not self.connected:
             if self.debug:
-                print("Not connected. Make sure to use connect()")
+                print("HttpHandler: Not connected. Make sure to use connect()")
             return None
 
         json_string = ""
@@ -89,7 +89,7 @@ class HttpHandler:
                 json_string = json.dumps(json_dict)
             except Exception as e:
                 if self.debug:
-                    print("failed to parse dictionary: " + str(e))
+                    print("HttpHandler: failed to parse dictionary: " + str(e))
                 return None
 
         # Build the header
@@ -114,7 +114,7 @@ class HttpHandler:
             self.socket.sendall(request)
         except Exception as e:
             if self.debug:
-                print("failed to send to socket: " + str(e))
+                print("HttpHandler: failed to send to socket: " + str(e))
             return None
 
         # Read entire response, return if socket fails
@@ -132,7 +132,7 @@ class HttpHandler:
 
         except Exception as e:
             if self.debug:
-                print("failed to read response from socket: " + str(e))
+                print("HttpHandler: failed to read response from socket: " + str(e))
             return None
 
         response_lines = response.split("\r\n")
@@ -154,7 +154,7 @@ class HttpHandler:
         if "301" in http_status or "302" in http_status:
             # Redirect
             if self.debug:
-                print("encountered 301 Moved or 302 Found")
+                print("HttpHandler: encountered 301 Moved or 302 Found")
             for line in response_lines:
                 if "Location" in line:
                     # Extract redirect url from Location header
@@ -162,7 +162,7 @@ class HttpHandler:
                     if "odin.cs.uab.edu" not in redirect_url:
                         # url redirects outside of Odin
                         if self.debug:
-                            print("Tried to redirect outside of odin: " + redirect_url)
+                            print("HttpHandler: Tried to redirect outside of odin: " + redirect_url)
                         return None
 
                     new_request = redirect_url[redirect_url.find('/'):]
@@ -175,13 +175,13 @@ class HttpHandler:
         if "401" in http_status or "403" in http_status or "404" in http_status:
             # Forbidden or Not Found - Stop looking
             if self.debug:
-                print("encountered 401 Unauthorized, 403 Forbidden or 404 Not Found")
+                print("HttpHandler: encountered 401 Unauthorized, 403 Forbidden or 404 Not Found")
             return None
 
         if "500" in http_status:
             # Internal Server Error - Should retry
             if self.debug:
-                print("encountered 500 Internal Server Error")
+                print("HttpHandler: encountered 500 Internal Server Error")
             return self.send_request(request_type, url, json_dict)
 
         # Strip HTTP header, 1.1 byte denotations
@@ -191,7 +191,7 @@ class HttpHandler:
             return json.loads(response)
         except Exception as e:
             if self.debug:
-                print("Failed to parse JSON response: " + str(e))
+                print("HttpHandler: Failed to parse JSON response: " + str(e))
             return None
 
 
