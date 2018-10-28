@@ -38,3 +38,5 @@ for i in range(len(people)):
     # If it matches append it to secret_flags array
     if item['text'][0:12] == "SECRET FLAG:":
       secret_flags.append(item['text'])
+
+print(secret_flags)
