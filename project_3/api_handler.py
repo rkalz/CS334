@@ -100,7 +100,7 @@ class ApiHandler:
   
   Returns crawl_session dict in case you need to keep track. Data is accessed: crawl_session['key'] - for data: crawl_session['data']['people'][Array position]['uid']
   
-  get_people() does all of the above.
+  get_people() does the above.
   """
 
     def crawl(self, graph_id, access_token):
