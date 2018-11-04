@@ -163,19 +163,23 @@ class ApiHandler:
             local_friend_network = []
             if people_list == []:
                 for i in range(len(self.crawled_people)):
+                    current_user = crawled_people[i]
                     friend_list = self.http.send_request(
                         "GET", "/api/v1/friends/"+str(self.crawled_people[i]), None)
-                    local_friend_network.append(friend_list)
+                    user_and_friends = (current_user, friend_list)
+                    local_friend_network.append(user_and_friends)
                     self.friend_network.append(friend_list)
-                return local_friend_network
+                return local_friend_network, user_and_friends, current_user, friend_list
             elif people_list != []:
                 self.sort_people(people_list)
                 for i in range(len(people_list)):
+                    current_user = crawled_people[i]
                     friend_list = self.http.send_request(
                         "GET", "/api/v1/friends/"+str(people_list[i]), None)
-                    local_friend_network.append(friend_list)
+                    user_and_friends = (current_user, friend_list)
+                    local_friend_network.append(user_and_friends)
                     self.friend_network.append(friend_list)
-                return local_friend_network
+                return local_friend_network, user_and_friends, current_user, friend_list
         except Exception as e:
             if self.debug:
                 print("ApiHandler: Error: "+str(e) +
