@@ -169,7 +169,7 @@ class ApiHandler:
                     user_and_friends = (current_user, friend_list)
                     local_friend_network.append(user_and_friends)
                     self.friend_network.append(friend_list)
-                return local_friend_network, user_and_friends, current_user, friend_list
+                return local_friend_network
             elif people_list != []:
                 self.sort_people(people_list)
                 for i in range(len(people_list)):
@@ -179,7 +179,7 @@ class ApiHandler:
                     user_and_friends = (current_user, friend_list)
                     local_friend_network.append(user_and_friends)
                     self.friend_network.append(friend_list)
-                return local_friend_network, user_and_friends, current_user, friend_list
+                return local_friend_network,
         except Exception as e:
             if self.debug:
                 print("ApiHandler: Error: "+str(e) +
