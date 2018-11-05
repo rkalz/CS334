@@ -57,7 +57,7 @@ def djikstra(start, end, nodes):
 
 
 if __name__ == "__main__":
-    handler = HttpHandler(True)
+    handler = HttpHandler()
     handler.connect()
 
     auth = {
@@ -76,14 +76,22 @@ if __name__ == "__main__":
     for user in starting_nodes["people"]:
         users_to_process.append(Node(user['uid']))
 
-    while len(users_to_process) != 0:
+    while len(users_to_process) != 0 and len(flags) != 5:
         user = users_to_process.pop(0)
+        print(user.id)
         beets_response = handler.send_request("GET", "/api/v1/beets/"+str(user.id), None)
+        if beets_response is None:
+            users_to_process.append(user)
+            continue
+
         if "challenge" in beets_response:
             users_to_process.append(user)
+            print(beets_response["challenge"])
             shortest_path = djikstra(beets_response["challenge"]["from"], beets_response["challenge"]["to"],
                                      visited_nodes)
+            print(shortest_path)
             challenge_response = handler.send_request("POST", "/api/v1/challenges", {"distance": shortest_path})
+            print(challenge_response)
             continue
         else:
             for beet in beets_response["beets"]:
@@ -93,9 +101,13 @@ if __name__ == "__main__":
                     flags.append(text)
 
         friends_response = handler.send_request("GET", "/api/v1/friends/"+str(user.id), None)
-        if "challenge" in friends_response:
-            print(friends_response)
+        if "friends_response" is None:
             users_to_process.append(user)
+            continue
+
+        if "challenge" in friends_response:
+            users_to_process.append(user)
+            print(friends_response["challenge"])
             shortest_path = djikstra(friends_response["challenge"]["from"], friends_response["challenge"]["to"],
                                      visited_nodes)
             print(shortest_path)

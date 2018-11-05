@@ -37,7 +37,7 @@ class HttpHandler:
             return False
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.settimeout(30)
+        self.socket.settimeout(10)
 
         try:
             self.socket.connect((self.host, self.port))
