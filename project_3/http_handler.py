@@ -37,7 +37,7 @@ class HttpHandler:
             return False
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.settimeout(10)
+        self.socket.settimeout(30)
 
         try:
             self.socket.connect((self.host, self.port))
@@ -201,8 +201,8 @@ if __name__ == "__main__":
     handler.connect()
 
     auth = {
-        "email": "lazrak13@uab.edu",
-        "password": "ecBA8sbo",
+        "email": "rofael@uab.edu",
+        "password": "24QM6tTz",
         "grant_type": "password"
     }
     auth_result = handler.send_request("POST", "/oauth/token", auth)
