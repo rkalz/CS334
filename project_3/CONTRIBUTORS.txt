@@ -1,0 +1,5 @@
+Sam Lazrak: api_handler.py
+
+Rofael Aleezada: http_handler.py, backup_crawler.py
+
+James Ward: bittercrawler.py
