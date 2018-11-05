@@ -88,23 +88,18 @@ if __name__ == "__main__":
 
         if "challenge" in beets_response:
             users_to_process.append(user)
-            if "from" in beets_response["challenge"] and "to" in beets_response["challenge"]:
-                shortest_path = djikstra(beets_response["challenge"]["from"], beets_response["challenge"]["to"],
-                                         visited_nodes)
-                challenge_response = handler.send_request("POST", "/api/v1/challenges", {"distance": shortest_path})
+            shortest_path = djikstra(beets_response["challenge"]["from"], beets_response["challenge"]["to"],
+                                    visited_nodes)
+            challenge_response = handler.send_request("POST", "/api/v1/challenges", {"distance": shortest_path})
             continue
         else:
-            if "beets" in beets_response:
-                for beet in beets_response["beets"]:
-                    if "text" in beet:
-                        text = beet["text"]
-                        if "SECRET FLAG" in text:
-                            if flags.count(text) == 0:
-                                print(text)
-                                flags.append(text)
-            else:
-                users_to_process.append(user)
-                continue
+            for beet in beets_response["beets"]:
+                if "text" in beet:
+                    text = beet["text"]
+                    if "SECRET FLAG" in text:
+                        if flags.count(text) == 0:
+                            print(text)
+                            flags.append(text)
 
         friends_response = handler.send_request("GET", "/api/v1/friends/"+str(user.id), None)
         if friends_response is None:
@@ -118,16 +113,13 @@ if __name__ == "__main__":
             challenge_response = handler.send_request("POST", "/api/v1/challenges", {"distance": shortest_path})
             continue
         else:
-            if "friends" in friends_response:
-                for friend in friends_response["friends"]:
-                    user.children.add(friend['uid'])
-                    if friend['uid'] not in visited_nodes:
-                        users_to_process.append(Node(friend['uid']))
-            else:
-                users_to_process.append(user)
-                continue
+            for friend in friends_response["friends"]:
+                user.children.add(friend['uid'])
+                if friend['uid'] not in visited_nodes:
+                    users_to_process.append(Node(friend['uid']))
 
-        visited_nodes[user.id] = user
+            visited_nodes[user.id] = user
+
 
     print(flags)
 
