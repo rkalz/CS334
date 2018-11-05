@@ -39,11 +39,7 @@ requests after that. The program was run across multiple processes to maximize t
 api_handler.py: The simple test case in __main__ confirms all the functions work. Additional flags for debug responses and verbose debug
 responses provided.
 
-<<<<<<< HEAD
 Bittercrawler: Testing was pretty straight forward. Throughout development, each piece of logic was tested by adding print statements to see if
 specific list were being manipulated properly. After that, the only testing was in finding the flags.
-=======
-backup_crawler: Backup crawler was simply run until the desired keys were spit out, with bugs being fixed as they appeared.
 
-Webcrawler:
->>>>>>> 83f430bc78daf747d208f96312c83fdf2faf66d2
+backup_crawler: Backup crawler was simply run until the desired keys were spit out, with bugs being fixed as they appeared.

@@ -1,3 +1,4 @@
-Bittercrawler:James Ward
-API_Handler:
-HTTP_Handler:
+Bittercrawler: James Ward
+API_Handler: Sam Lazrak
+HTTP_Handler: Rofael Aleezada
+Backup Crawler: Rofael Aleezada
