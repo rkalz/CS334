@@ -1,4 +1,4 @@
-from project_3.http_handler import HttpHandler
+from http_handler import HttpHandler
 import heapq
 import sys
 
@@ -71,6 +71,9 @@ if __name__ == "__main__":
     visited_nodes = dict()
 
     auth_result = handler.send_request("POST", "/oauth/token", auth)
+    while auth_result is None:
+        auth_result = handler.send_request("POST", "/oauth/token", auth)
+    print("Logged in")
     handler.add_header("Authorization", auth_result["token_type"] + " " + auth_result["access_token"])
     starting_nodes = handler.send_request("POST", "/api/v1/crawl_sessions/2", None)
     for user in starting_nodes["people"]:

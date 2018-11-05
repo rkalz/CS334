@@ -32,7 +32,7 @@ Bittercrawler:
 Testing:
 
 HTTP Handler: Tests were created to make sure that the new function could send JSON, add headers, and send additional
-requests after that.
+requests after that. The program was run across multiple processes to maximize the chance of getting the flags.
 
 api_handler.py: The simple test case in __main__ confirms all the functions work. Additional flags for debug responses and verbose debug
 responses provided.
