@@ -61,8 +61,8 @@ if __name__ == "__main__":
     handler.connect()
 
     auth = {
-        "email": "rofael@uab.edu",
-        "password": "24QM6tTz",
+        "email": sys.argv[1],
+        "password": sys.argv[2],
         "grant_type": "password"
     }
 
@@ -75,11 +75,11 @@ if __name__ == "__main__":
         auth_result = handler.send_request("POST", "/oauth/token", auth)
     print("Logged in")
     handler.add_header("Authorization", auth_result["token_type"] + " " + auth_result["access_token"])
-    starting_nodes = handler.send_request("POST", "/api/v1/crawl_sessions/2", None)
+    starting_nodes = handler.send_request("POST", "/api/v1/crawl_sessions/"+sys.argv[3], None)
     for user in starting_nodes["people"]:
         users_to_process.append(Node(user['uid']))
 
-    while len(users_to_process) != 0 and len(flags) != 5:
+    while len(users_to_process) != 0:
         user = users_to_process.pop(0)
         beets_response = handler.send_request("GET", "/api/v1/beets/"+str(user.id), None)
         if beets_response is None:
@@ -99,8 +99,9 @@ if __name__ == "__main__":
                     if "text" in beet:
                         text = beet["text"]
                         if "SECRET FLAG" in text:
-                            print(text)
-                            flags.append(text)
+                            if flags.count(text) == 0:
+                                print(text)
+                                flags.append(text)
             else:
                 users_to_process.append(user)
                 continue
