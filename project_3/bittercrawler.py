@@ -12,6 +12,10 @@ authorization = {
 handler = ApiHandler(authorization, True)
 users_friends = []
 vertices = []
+checked = []
+unchecked = []
+beets = []
+flags = []
 
 def verticeMaker(people_friends):
   while(people_friends):
@@ -45,23 +49,29 @@ def dijkstra(start, end, people_friends):
       currentSet.remove(currentSet[0])
   return totalDis
 
-while(len(handler.secret_flags) < 5):
+while(len(flags) < 5):
   handler.login(authorization)
   handler.crawl(sys.argv[3], handler.access_token)
-  print(handler.secret_flags)
-  handler.get_flags([])
   print(0)
-  handler.get_people(handler.crawl_session, [])
+  newPeople = handler.get_people(handler.crawl_session, [])
+  while(newPeople):
+    if(newPeople[0] not in checked) and (newPeople[0] not in unchecked):
+      unchecked.append(newPeople[0])
+      newPeople.remove(newPeople[0])
+    else:
+      newPeople.remove(newPeople[0])
   print(0.1)
-  users_friends = handler.get_friends([])
+  while(unchecked):
+    users_friends = handler.get_friends(unchecked[0])
+    beets = handler.get_beets(unchecked[0])
+    while(beets):
+      if beets[0]['text'][0:12] == "SECRET FLAG:":
+                flags.append(beets[0]['text'])
+                beets.remove(beets[0])
+      else:
+        beets.remove(beets[0])
+    checked.append(unchecked[0])
+    unchecked.remove(unchecked[0])
   print(0.2)
-  if(handler.get_people(sys.argv[3], handler.access_token) == False):
-    print(0.3)
-    print(handler.crawled_people)
-    print(users_friends)
-    challenge = handler.get_challenge()
-    if(challenge != False):
-      solution = dijkstra(challenge[0], challenge[1], users_friends)
-      print(handler.post_challenge(solution))
 
-print(handler.secret_flags)
+print(flags)
