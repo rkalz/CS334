@@ -103,7 +103,7 @@ if __name__ == "__main__":
                 continue
 
         friends_response = handler.send_request("GET", "/api/v1/friends/"+str(user.id), None)
-        if "friends_response" is None:
+        if friends_response is None:
             users_to_process.append(user)
             continue
 
