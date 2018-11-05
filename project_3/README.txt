@@ -10,7 +10,9 @@ api_handler.py: Abstracts the api for use by the bittercrawler, the appraoch was
 bittercrawler by simplifying interactions with the api. The api_handler sits on top of the http_handler and allows it to make all the
 neccesary requests. 
 
-Bittercrawler:
+Bittercrawler: The crawler was not much different than assignment 2. The main differences was having to figure out how to account for the 
+challenges. The crwaler tracks who's beets have and have not been checked for flags. Once the crawler ran into a challenge, it would then solve
+the challenge by using dijkstra's. 
 
 Difficulties:
 HTTP Handler: The handler was able to adjust to the new changes without much hassle. Most of our issues came from upstream.
@@ -18,7 +20,7 @@ HTTP Handler: The handler was able to adjust to the new changes without much has
 api_handler.py: The difficulties came from the way the data was structures and needing to extract various data points while
 maintaining continuity. 
 
-Bittercrawler:
+Bittercrawler:The hardest part of designing the crawler, was figuring out how to manipulate the data in a way it could be tracked.
 
 Testing:
 
@@ -28,4 +30,5 @@ requests after that.
 api_handler.py: The simple test case in __main__ confirms all the functions work. Additional flags for debug responses and verbose debug
 responses provided.
 
-Webcrawler: 
+Bittercrawler: Testing was pretty straight forward. Throughout development, each piece of logic was tested by adding print statements to see if
+specific list were being manipulated properly. After that, the only testing was in finding the flags.

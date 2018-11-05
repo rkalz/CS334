@@ -50,28 +50,35 @@ def dijkstra(start, end, people_friends):
   return totalDis
 
 while(len(flags) < 5):
+  print(0)
   handler.login(authorization)
   handler.crawl(sys.argv[3], handler.access_token)
-  print(0)
   newPeople = handler.get_people(handler.crawl_session, [])
   while(newPeople):
+    print(1)
     if(newPeople[0] not in checked) and (newPeople[0] not in unchecked):
+      print(2)
       unchecked.append(newPeople[0])
       newPeople.remove(newPeople[0])
     else:
+      print(3)
       newPeople.remove(newPeople[0])
-  print(0.1)
   while(unchecked):
+    print(4)
     users_friends = handler.get_friends(unchecked[0])
     beets = handler.get_beets(unchecked[0])
+    print(beets)
     while(beets):
-      if beets[0]['text'][0:12] == "SECRET FLAG:":
-                flags.append(beets[0]['text'])
-                beets.remove(beets[0])
+      print(5)
+      if(beets['beets'][0]['text'][0:12] == "SECRET FLAG:"):
+        print(6)
+        flags.append(beets['beets'][0]['text'])
+        beets.remove(beets['beets'][0])
       else:
-        beets.remove(beets[0])
+        print(7)
+        beets.remove(beets['beets'][0])
     checked.append(unchecked[0])
     unchecked.remove(unchecked[0])
-  print(0.2)
+  print(flags)
 
 print(flags)
