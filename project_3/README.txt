@@ -12,11 +12,20 @@ neccesary requests.
 
 Bittercrawler:
 
+Backup_Crawler: A backup crawler was used acting as a backup should something happen to the main crawler. Backup_Crawler was written
+before api_handler and thus uses the HTTP handler directly. Djikstra is correctly working in this crawler. This crawler
+works by first parsing the beets of a user, then adding their friends to the graph, accounting for challenges that may
+occur during those requests.
+
 Difficulties:
 HTTP Handler: The handler was able to adjust to the new changes without much hassle. Most of our issues came from upstream.
 
 api_handler.py: The difficulties came from the way the data was structures and needing to extract various data points while
-maintaining continuity. 
+maintaining continuity.
+
+backup_crawler: Most of backup crawler's issues came from assumptions about the responses from the Bitter API. Attempting
+to access certain keys in either a null object or a JSON response that didn't have that key would result in a crash. THis
+was alleviated by checking if the desired key existed in the response dict, and retrying the requests if it didn't.
 
 Bittercrawler:
 
@@ -28,4 +37,6 @@ requests after that.
 api_handler.py: The simple test case in __main__ confirms all the functions work. Additional flags for debug responses and verbose debug
 responses provided.
 
-Webcrawler: 
+backup_crawler: Backup crawler was simply run until the desired keys were spit out, with bugs being fixed as they appeared.
+
+Webcrawler:
