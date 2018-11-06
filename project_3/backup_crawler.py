@@ -88,18 +88,28 @@ if __name__ == "__main__":
 
         if "challenge" in beets_response:
             users_to_process.append(user)
-            shortest_path = djikstra(beets_response["challenge"]["from"], beets_response["challenge"]["to"],
-                                    visited_nodes)
-            challenge_response = handler.send_request("POST", "/api/v1/challenges", {"distance": shortest_path})
+            #shortest_path = djikstra(beets_response["challenge"]["from"], beets_response["challenge"]["to"],
+            #                        visited_nodes)
+            #challenge_response = handler.send_request("POST", "/api/v1/challenges", {"distance": shortest_path})
+            auth_result = handler.send_request("POST", "/oauth/token", auth)
+            while auth_result is None:
+                auth_result = handler.send_request("POST", "/oauth/token", auth)
+            if "access_token" in auth_result:
+                handler.add_header("Authorization", auth_result["token_type"] + " " + auth_result["access_token"])
+                handler.send_request("POST", "/api/v1/crawl_sessions/" + sys.argv[3], None)
             continue
         else:
-            for beet in beets_response["beets"]:
-                if "text" in beet:
-                    text = beet["text"]
-                    if "SECRET FLAG" in text:
-                        if flags.count(text) == 0:
-                            print(text)
-                            flags.append(text)
+            if "beets" in beets_response:
+                for beet in beets_response["beets"]:
+                    if "text" in beet:
+                        text = beet["text"]
+                        if "SECRET FLAG" in text:
+                            if flags.count(text) == 0:
+                                print(text)
+                                flags.append(text)
+            else:
+                users_to_process.append(user)
+                continue
 
         friends_response = handler.send_request("GET", "/api/v1/friends/"+str(user.id), None)
         if friends_response is None:
@@ -108,18 +118,26 @@ if __name__ == "__main__":
 
         if "challenge" in friends_response:
             users_to_process.append(user)
-            shortest_path = djikstra(friends_response["challenge"]["from"], friends_response["challenge"]["to"],
-                                     visited_nodes)
-            challenge_response = handler.send_request("POST", "/api/v1/challenges", {"distance": shortest_path})
+            #shortest_path = djikstra(friends_response["challenge"]["from"], friends_response["challenge"]["to"],
+            #                         visited_nodes)
+            #challenge_response = handler.send_request("POST", "/api/v1/challenges", {"distance": shortest_path})
+            auth_result = handler.send_request("POST", "/oauth/token", auth)
+            while auth_result is None:
+                auth_result = handler.send_request("POST", "/oauth/token", auth)
+            if "access_token" in auth_result:
+                handler.add_header("Authorization", auth_result["token_type"] + " " + auth_result["access_token"])
+                handler.send_request("POST", "/api/v1/crawl_sessions/" + sys.argv[3], None)
             continue
         else:
-            for friend in friends_response["friends"]:
-                user.children.add(friend['uid'])
-                if friend['uid'] not in visited_nodes:
-                    users_to_process.append(Node(friend['uid']))
-
-            visited_nodes[user.id] = user
-
+            if "friends" in friends_response:
+                for friend in friends_response["friends"]:
+                    user.children.add(friend['uid'])
+                    if friend['uid'] not in visited_nodes:
+                        users_to_process.append(Node(friend['uid']))
+                visited_nodes[user.id] = user
+            else:
+                users_to_process.append(user)
+                continue
 
     print(flags)
 
