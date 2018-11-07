@@ -76,6 +76,8 @@ if __name__ == "__main__":
     print("Logged in")
     handler.add_header("Authorization", auth_result["token_type"] + " " + auth_result["access_token"])
     starting_nodes = handler.send_request("POST", "/api/v1/crawl_sessions/"+sys.argv[3], None)
+    while "people" not in starting_nodes:
+        starting_nodes = handler.send_request("POST", "/api/v1/crawl_sessions/" + sys.argv[3], None)
     for user in starting_nodes["people"]:
         users_to_process.append(Node(user['uid']))
 
