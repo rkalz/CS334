@@ -1,7 +1,7 @@
 import struct
 from random import randint
 
-from ip_helper import _compute_ip_checksum
+from ip_helper import build_ip_header, _compute_ip_checksum
 
 _FIN_FLAG = 1
 _SYN_FLAG = 2
@@ -32,25 +32,45 @@ def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, syn_num, 
 
     # Calculate the checksum
     # TODO: Are the IP and TCP checksums the same?
-    incomplete_segment = struct.pack(">HHIIBBHHHs",
-                                     src_port,      dest_port,
-                                     syn_num,
-                                     ack_num,
-                                     offset_and_ns, flags,     window_size,
-                                     checksum,      urg_ptr,
-                                     data)
+    if data is None:
+        incomplete_segment = struct.pack(">HHIIBBHHH",
+                                         src_port, dest_port,
+                                         syn_num,
+                                         ack_num,
+                                         offset_and_ns, flags, window_size,
+                                         checksum, urg_ptr)
+    else:
+        incomplete_segment = struct.pack(">HHIIBBHHHs",
+                                         src_port,      dest_port,
+                                         syn_num,
+                                         ack_num,
+                                         offset_and_ns, flags,     window_size,
+                                         checksum,      urg_ptr,
+                                         data)
+
     checksum = _compute_ip_checksum(src_addr, dest_addr, incomplete_segment)
 
-    segment = struct.pack(">HHIIBBHHHs",
-                          src_port,      dest_port,
-                          syn_num,
-                          ack_num,
-                          offset_and_ns, flags,     window_size,
-                          checksum,      urg_ptr,
-                          data)
+    if data is None:
+        segment = struct.pack(">HHIIBBHHH",
+                              src_port, dest_port,
+                              syn_num,
+                              ack_num,
+                              offset_and_ns, flags, window_size,
+                              checksum, urg_ptr)
+    else:
+        segment = struct.pack(">HHIIBBHHHs",
+                              src_port,      dest_port,
+                              syn_num,
+                              ack_num,
+                              offset_and_ns, flags,     window_size,
+                              checksum,      urg_ptr,
+                              data)
 
-    return segment
+    return segment, syn_num, ack_num
 
 
-def build_syn_packet(src_addr, src_port, dest_addr, dest_port):
-    return _build_tcp_header(_SYN_FLAG, src_addr, src_port, dest_addr, dest_port, None, None)
+def build_syn_packet(src_addr, src_port, dest_addr, dest_port, ttl):
+    syn_tcp_component, syn_num, ack_num = \
+        _build_tcp_header(_SYN_FLAG, src_addr, src_port, dest_addr, dest_port, None, None)
+    full_ip_packet = build_ip_header(src_addr, dest_addr, ttl, syn_tcp_component)
+    return full_ip_packet, syn_num, ack_num

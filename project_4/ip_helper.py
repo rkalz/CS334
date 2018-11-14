@@ -8,11 +8,11 @@ _ADDITIONAL_FRAGMENTS = 1
 def _compute_ip_checksum(src_addr, dest_addr, ip_segment):
     # Make segment even length
     if len(ip_segment) & 1:
-        tcp_segment = bytes(bytearray(ip_segment).append(0))
+        ip_segment += 0
 
     # Build pseudoheader and thing to calc
     pseudo_header = struct.pack(">IIBBH", src_addr, dest_addr, 0, IPPROTO_TCP, len(ip_segment))
-    thing_to_calc = bytes(bytearray(pseudo_header).append(ip_segment))
+    thing_to_calc = pseudo_header + ip_segment
     sum = 0
 
     for i in range(1, len(thing_to_calc), 2):
@@ -53,23 +53,40 @@ def build_ip_header(src_addr, dest_addr, ttl, data):
     ver_and_ihl = version << 4 + ihl
     dscp_and_ecn = dscp << 2 + ecn
     flags_and_frag_offset = flags << 13 + fragment_offset
-    incomplete_fragment = struct.pack(">BBHHHBBHHHs",
-                                      ver_and_ihl,    dscp_and_ecn,          total_length,
-                                      identification, flags_and_frag_offset,
-                                      ttl,            protocol,              checksum,
-                                      src_addr,
-                                      dest_addr,
-                                      data)
+
+    if data is None:
+        incomplete_fragment = struct.pack(">BBHHHBBHHH",
+                                          ver_and_ihl, dscp_and_ecn, total_length,
+                                          identification, flags_and_frag_offset,
+                                          ttl, protocol, checksum,
+                                          src_addr,
+                                          dest_addr)
+    else:
+        incomplete_fragment = struct.pack(">BBHHHBBHHHs",
+                                          ver_and_ihl,    dscp_and_ecn,          total_length,
+                                          identification, flags_and_frag_offset,
+                                          ttl,            protocol,              checksum,
+                                          src_addr,
+                                          dest_addr,
+                                          data)
 
     checksum = _compute_ip_checksum(src_addr, dest_addr, incomplete_fragment)
 
-    fragment = struct.pack(">BBHHHBBHHHs",
-                           ver_and_ihl,    dscp_and_ecn,          total_length,
-                           identification, flags_and_frag_offset,
-                           ttl,            protocol,              checksum,
-                           src_addr,
-                           dest_addr,
-                           data)
+    if data is None:
+        fragment = struct.pack(">BBHHHBBHHH",
+                                          ver_and_ihl, dscp_and_ecn, total_length,
+                                          identification, flags_and_frag_offset,
+                                          ttl, protocol, checksum,
+                                          src_addr,
+                                          dest_addr)
+    else:
+        fragment = struct.pack(">BBHHHBBHHHs",
+                                          ver_and_ihl,    dscp_and_ecn,          total_length,
+                                          identification, flags_and_frag_offset,
+                                          ttl,            protocol,              checksum,
+                                          src_addr,
+                                          dest_addr,
+                                          data)
 
     return fragment
 
