@@ -81,11 +81,8 @@ def build_ip_header(src_addr, dest_addr, ttl, data):
     return fragment
 
 def parse_ip_header(data):
-    try:
-        valid_ip_header = struct.unpack(">BBHHHBBHII", data)
-    except:
-        # This isn't a valid IP header
-        return None
+    # Since received packets will handle IP, this will probably never be used
+    valid_ip_header = struct.unpack(">BBHHHBBHII", data)
 
     ver_and_ihl = valid_ip_header[0]
     dscp_and_ecn = valid_ip_header[1]
@@ -97,5 +94,4 @@ def parse_ip_header(data):
     checksum = valid_ip_header[7]
     src_addr = valid_ip_header[8]
     dest_addr = valid_ip_header[9]
-
 

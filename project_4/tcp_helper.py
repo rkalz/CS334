@@ -56,10 +56,22 @@ def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, syn_num, 
 
 
 def build_syn_packet(src_addr, src_port, dest_addr, dest_port, ttl):
-    syn_tcp_component, syn_num, ack_num = \
+    syn_tcp_component, syn_num, _ = \
         _build_tcp_header(_SYN_FLAG, src_addr, src_port, dest_addr, dest_port, None, None)
     full_ip_packet = build_ip_header(src_addr, dest_addr, ttl, syn_tcp_component)
-    return full_ip_packet, syn_num, ack_num
+    return full_ip_packet, syn_num
 
-def parse_tcp_bytes(data):
-    pass
+def parse_tcp_header_response(data):
+    tcp_header = struct.unpack(">HHIIBBHHH", data)
+
+    src_port = tcp_header[0]
+    dest_port = tcp_header[1]
+    syn_num = tcp_header[2]
+    ack_num = tcp_header[3]
+    offset_and_ns = tcp_header[4]
+    flags = tcp_header[5]
+    window_size = tcp_header[6]
+    checksum = tcp_header[7]
+    urg_ptr = tcp_header[8]
+
+    return src_port, dest_port, syn_num, ack_num, flags, window_size, checksum
