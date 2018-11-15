@@ -15,17 +15,21 @@ def _compute_ip_checksum(src_addr, dest_addr, ip_segment):
     thing_to_calc = pseudo_header + ip_segment
     sum = 0
 
+    # Sum of all two byte pairs in thing_to_calc
     for i in range(1, len(thing_to_calc), 2):
         num = (int(thing_to_calc[i-1]) << 8) + int(thing_to_calc[i])
         sum += num
 
-    carry = sum >> 8
+    # Add third byte to bottom two bytes
+    carry = sum >> 16
+    sum &= 0xFFFF
     sum += carry
 
+    # Perform twos complement and extract bottom two bytes
     sum = ~sum
+    sum &= 0xFFFF
 
     return sum
-
 
 def build_ip_header(src_addr, dest_addr, ttl, data):
     version = 4
@@ -33,11 +37,11 @@ def build_ip_header(src_addr, dest_addr, ttl, data):
 
     dscp = 0
     ecn = 0
-    total_length = 4 * ihl + len(data)
+    total_length = (4 * ihl) + len(data)
 
     identification = 0
 
-    flags = _DONT_FRAGMENT               # TODO: Handle fragmentation in recv
+    flags = _DONT_FRAGMENT               # We don't need to fragment when we're sending data
     fragment_offset = 0
 
     protocol = IPPROTO_TCP
@@ -50,44 +54,48 @@ def build_ip_header(src_addr, dest_addr, ttl, data):
     # I - 4 bytes
     # s - string
 
-    ver_and_ihl = version << 4 + ihl
-    dscp_and_ecn = dscp << 2 + ecn
-    flags_and_frag_offset = flags << 13 + fragment_offset
+    ver_and_ihl = (version << 4) + ihl
+    dscp_and_ecn = (dscp << 2) + ecn
+    flags_and_frag_offset = (flags << 13) + fragment_offset
 
-    if data is None:
-        incomplete_fragment = struct.pack(">BBHHHBBHHH",
+    incomplete_fragment = struct.pack(">BBHHHBBHII",
                                           ver_and_ihl, dscp_and_ecn, total_length,
                                           identification, flags_and_frag_offset,
                                           ttl, protocol, checksum,
                                           src_addr,
                                           dest_addr)
-    else:
-        incomplete_fragment = struct.pack(">BBHHHBBHHHs",
-                                          ver_and_ihl,    dscp_and_ecn,          total_length,
-                                          identification, flags_and_frag_offset,
-                                          ttl,            protocol,              checksum,
-                                          src_addr,
-                                          dest_addr,
-                                          data)
+    if data is not None:
+        incomplete_fragment += data
 
     checksum = _compute_ip_checksum(src_addr, dest_addr, incomplete_fragment)
 
-    if data is None:
-        fragment = struct.pack(">BBHHHBBHHH",
+    fragment = struct.pack(">BBHHHBBHII",
                                           ver_and_ihl, dscp_and_ecn, total_length,
                                           identification, flags_and_frag_offset,
                                           ttl, protocol, checksum,
                                           src_addr,
                                           dest_addr)
-    else:
-        fragment = struct.pack(">BBHHHBBHHHs",
-                                          ver_and_ihl,    dscp_and_ecn,          total_length,
-                                          identification, flags_and_frag_offset,
-                                          ttl,            protocol,              checksum,
-                                          src_addr,
-                                          dest_addr,
-                                          data)
+    if data is not None:
+        fragment += data
 
     return fragment
+
+def parse_ip_header(data):
+    try:
+        valid_ip_header = struct.unpack(">BBHHHBBHII", data)
+    except:
+        # This isn't a valid IP header
+        return None
+
+    ver_and_ihl = valid_ip_header[0]
+    dscp_and_ecn = valid_ip_header[1]
+    total_length = valid_ip_header[2]
+    identification = valid_ip_header[3]
+    flags_and_frag_offset = valid_ip_header[4]
+    ttl = valid_ip_header[5]
+    protocol = valid_ip_header[6]
+    checksum = valid_ip_header[7]
+    src_addr = valid_ip_header[8]
+    dest_addr = valid_ip_header[9]
 
 

@@ -22,49 +22,35 @@ def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, syn_num, 
     else:
         # If syn, set
         ack_num = syn_num + 1
-    data_offset = 5                      # header_length / 4, TODO: Will we need options?
+    data_offset = 5                      # header_length / 4, we don't need options to send
     window_size = (1 << 16) - 1          # TODO: fix this?
     checksum = 0
-    urg_ptr = 0                          # TODO: implement URG send?
+    urg_ptr = 0
 
-    offset_and_ns = data_offset << 4 + (flags & _NS_FLAG)
-    flags = flags & ((1 << 9) - 1)
+    offset_and_ns = (data_offset << 4) + (flags & _NS_FLAG)
+    flags &= 0xFF                        # Remove NS flag from flags
 
     # Calculate the checksum
     # TODO: Are the IP and TCP checksums the same?
-    if data is None:
-        incomplete_segment = struct.pack(">HHIIBBHHH",
+    incomplete_segment = struct.pack(">HHIIBBHHH",
                                          src_port, dest_port,
                                          syn_num,
                                          ack_num,
                                          offset_and_ns, flags, window_size,
                                          checksum, urg_ptr)
-    else:
-        incomplete_segment = struct.pack(">HHIIBBHHHs",
-                                         src_port,      dest_port,
-                                         syn_num,
-                                         ack_num,
-                                         offset_and_ns, flags,     window_size,
-                                         checksum,      urg_ptr,
-                                         data)
+    if data is not None:
+        incomplete_segment += data
 
     checksum = _compute_ip_checksum(src_addr, dest_addr, incomplete_segment)
 
-    if data is None:
-        segment = struct.pack(">HHIIBBHHH",
+    segment = struct.pack(">HHIIBBHHH",
                               src_port, dest_port,
                               syn_num,
                               ack_num,
                               offset_and_ns, flags, window_size,
                               checksum, urg_ptr)
-    else:
-        segment = struct.pack(">HHIIBBHHHs",
-                              src_port,      dest_port,
-                              syn_num,
-                              ack_num,
-                              offset_and_ns, flags,     window_size,
-                              checksum,      urg_ptr,
-                              data)
+    if data is not None:
+        segment += data
 
     return segment, syn_num, ack_num
 
@@ -74,3 +60,6 @@ def build_syn_packet(src_addr, src_port, dest_addr, dest_port, ttl):
         _build_tcp_header(_SYN_FLAG, src_addr, src_port, dest_addr, dest_port, None, None)
     full_ip_packet = build_ip_header(src_addr, dest_addr, ttl, syn_tcp_component)
     return full_ip_packet, syn_num, ack_num
+
+def parse_tcp_bytes(data):
+    pass
