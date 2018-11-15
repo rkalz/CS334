@@ -4,8 +4,11 @@ from socket import IPPROTO_TCP
 _DONT_FRAGMENT = 2
 _ADDITIONAL_FRAGMENTS = 1
 
+def verify_checksum(src_addr, dest_addr, ip_segment):
+    computed_checksum = compute_checksum(src_addr, dest_addr, ip_segment)
+    return computed_checksum == 0
 
-def _compute_ip_checksum(src_addr, dest_addr, ip_segment):
+def compute_checksum(src_addr, dest_addr, ip_segment):
     # Make segment even length
     if len(ip_segment) & 1:
         ip_segment += 0
@@ -67,7 +70,7 @@ def build_ip_header(src_addr, dest_addr, ttl, data):
     if data is not None:
         incomplete_fragment += data
 
-    checksum = _compute_ip_checksum(src_addr, dest_addr, incomplete_fragment)
+    checksum = compute_checksum(src_addr, dest_addr, incomplete_fragment)
 
     fragment = struct.pack(">BBHHHBBHII",
                                           ver_and_ihl, dscp_and_ecn, total_length,
