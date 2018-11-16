@@ -24,7 +24,11 @@ class MyTcpSocket:
         if geteuid() != 0:
             raise Exception("You must be running as superuser for this to work!")
 
-        # Might as well do the IPtables thing since we're in sudo
+        # Tell the kernel to not send RST packets back to the remote
+        # All packets that this raw socket will see are also passed to the kernel
+        # Since our port isn't bound in the OS TCP stack, the OS will assume that the remote
+        # is trying to access a closed socket and will then send a RST, which will kill the
+        # remote's connection and make us sad
         system("sudo iptables -A OUTPUT -p tcp --tcp-flags RST RST -j DROP")
 
         self.sending_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
@@ -48,6 +52,7 @@ class MyTcpSocket:
         self.timeout = 60
         self.is_connected = False
 
+        self.cwnd = 0
         self.seq_num = 0
         self.ack_num = 0
 
@@ -60,11 +65,19 @@ class MyTcpSocket:
         s.close()
         return my_ip
 
+    def _handle_congestion(self, didnt_get_ack=False):
+        # Congestion handling rules as defined in the project
+        # Reset if an ack fails or we hit 1000
+        if self.cwnd == 1000 or didnt_get_ack:
+            self.cwnd = 0
+
+        self.cwnd += 1
+
+    # TODO: Handle RST in here?
     def _get_next_packet(self):
         # Receiving packet gives us MAC and up
-        # We will only check the IP header of this
-        # (Correct IP, correct connection type,)
-        # and return the beginning of the TCP header
+        # We will check both IP and TCP
+        # and return relevant TCP information
         start_time = time()
         while True:
             diff = time() - start_time
@@ -184,10 +197,11 @@ class MyTcpSocket:
                 # This isn't the ACK we're looking for
                 # Send a new SYN
                 if self.debug:
-                    print("connect: received incorrect ACK! expected", 
+                    print("connect: received incorrect ACK! expected",
                     str(first_seq_num + 1), "got", str(ack_num))
                 continue
-                
+            self._handle_congestion()
+
             # send ACK
             ack_packet, seq_num, ack_num = build_ack_packet(self.src_host, self.src_port, self.dst_host,
                 self.dst_port, self.timeout, ack_num, seq_num + 1, None)
@@ -202,7 +216,8 @@ class MyTcpSocket:
             if self.debug:
                 print("connect: successful")
             return
-        
+
+        self._handle_congestion(True)
         raise Exception("Failed to receive packet in time!")
         
 
@@ -222,6 +237,8 @@ class MyTcpSocket:
     def recv(self, bytes_to_recv):
         # receive data
         # TODO: Handle ordering issues (only if we do HTTP)
+
+        self._handle_congestion()
         if self.debug:
             print("recv: received data")
         # send ACK
@@ -235,8 +252,10 @@ class MyTcpSocket:
         # send FIN/ACK
 
         # receive ACK
+        self._handle_congestion()
 
         # wait for server FIN/ACK
+        self._handle_congestion()
 
         # send ACK
 
