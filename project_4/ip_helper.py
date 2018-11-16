@@ -51,13 +51,6 @@ def build_ip_header(src_addr, dest_addr, ttl, data):
     protocol = IPPROTO_TCP
     checksum = 0
 
-    # Struct Notes
-    # > - big endian
-    # B - 1 byte
-    # H - 2 bytes
-    # I - 4 bytes
-    # s - string
-
     ver_and_ihl = (version << 4) + ihl
     dscp_and_ecn = (dscp << 2) + ecn
     flags_and_frag_offset = (flags << 13) + fragment_offset
@@ -86,14 +79,14 @@ def build_ip_header(src_addr, dest_addr, ttl, data):
 def parse_ip_header(data):
     valid_ip_header = struct.unpack(">BBHHHBBHII", data)
 
-    ver_and_ihl = valid_ip_header[0]
-    dscp_and_ecn = valid_ip_header[1]
-    total_length = valid_ip_header[2]
-    identification = valid_ip_header[3]
-    flags_and_frag_offset = valid_ip_header[4]
-    ttl = valid_ip_header[5]
+    # ver_and_ihl = valid_ip_header[0]
+    # dscp_and_ecn = valid_ip_header[1]
+    # total_length = valid_ip_header[2]
+    # identification = valid_ip_header[3]
+    # flags_and_frag_offset = valid_ip_header[4]
+    # ttl = valid_ip_header[5]
     protocol = valid_ip_header[6]
-    checksum = valid_ip_header[7]
+    # checksum = valid_ip_header[7]
     src_addr = valid_ip_header[8]
     dest_addr = valid_ip_header[9]
 

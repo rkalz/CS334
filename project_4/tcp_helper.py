@@ -26,7 +26,7 @@ def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, seq_num, 
     urg_ptr = 0
 
     offset_and_ns = (data_offset << 4) + (flags & _NS_FLAG)
-    flags &= 0xFF                        # Remove NS flag from flags
+    flags &= 0xFF                        # Remove NS flag from input flags
 
     # Calculate the checksum
     incomplete_segment = struct.pack(">HHIIBBHHH",
@@ -76,6 +76,6 @@ def parse_tcp_header_response(data):
     flags = tcp_header[5]
     window_size = tcp_header[6]
     checksum = tcp_header[7]
-    urg_ptr = tcp_header[8]
+    # urg_ptr = tcp_header[8]
 
     return src_port, dest_port, seq_num, ack_num, offset_and_ns, flags, window_size, checksum

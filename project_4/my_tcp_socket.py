@@ -37,10 +37,11 @@ class MyTcpSocket:
         self.debug = debug
         self.debug_verbose = debug_verbose
 
-        self.src_host = self._resolve_local_ip()
+        self.src_host = int(IPv4Address(self._resolve_local_ip()))
         self.src_port = randint(10000, 65535)
         if self.debug:
-            print("constructor: Host is", self.src_host, "at port", self.src_port)
+            print("constructor: Host is", str(IPv4Address(self.src_host))
+            , "at port", self.src_port)
 
         self.dst_host = None
         self.dst_port = None
@@ -80,10 +81,8 @@ class MyTcpSocket:
 
             # TODO: Change ip member variable to int (why do we need to keep it as a string)
             packet_src, packet_dst, packet_type = parse_ip_header(ip_header)
-            packet_src_str = str(IPv4Address(packet_src))
-            packet_dst_str = str(IPv4Address(packet_dst))
-            if packet_type != socket.IPPROTO_TCP or packet_src_str != self.dst_host \
-                or packet_dst_str != self.src_host:
+            if packet_type != socket.IPPROTO_TCP or packet_src != self.dst_host \
+                or packet_dst != self.src_host:
                 # Either it's not TCP, sent by a different source, and/or meant for a 
                 # different IP
                 if self.debug_verbose:
@@ -94,6 +93,8 @@ class MyTcpSocket:
                     elif packet_type == socket.IPPROTO_UDP:
                         packet_type_str = "UDP"
 
+                    packet_src_str = str(IPv4Address(packet_src))
+                    packet_dst_str = str(IPv4Address(packet_dst))
                     packet_type_str = "(" + packet_type_str + ")"
                     print("_get_next_packet: Not our packet:", packet_src_str, "->", packet_dst_str
                     ,packet_type_str)
@@ -113,10 +114,10 @@ class MyTcpSocket:
             tcp_header_and_data = ip_and_later[_TCP_PACKET_START:]
             tcp_header = tcp_header_and_data[:_MIN_HEADER_SIZE]
             src_port, dest_port, seq_num, ack_num, offset_and_ns, \
-            flags, window_size, checksum = parse_tcp_header_response(tcp_header)
+            flags, _, _ = parse_tcp_header_response(tcp_header)
                 
             if src_port != self.dst_port and dest_port != self.src_port:
-                # This isn't our TCP packet. Try again.
+                # This isn't our TCP packet. Restart.
                 # Multiple sockets connected to the same IP, perhaps?
                 if self.debug_verbose:
                     print("_get_next_packet: Not our packet", src_port, "->", dest_port)
@@ -148,19 +149,21 @@ class MyTcpSocket:
         host = host_and_port_tuple[0]
         port = host_and_port_tuple[1]
 
-        self.dst_host = socket.gethostbyname(host)
+        self.dst_host = int(IPv4Address(socket.gethostbyname(host)))
         self.dst_port = port
 
-        self.sending_socket.connect((self.dst_host, self.dst_port))
-
-        host_ip = int(IPv4Address(self.src_host))
-        dest_ip = int(IPv4Address(self.dst_host))
+        dst_host_str = str(IPv4Address(self.dst_host))
+        self.sending_socket.connect((dst_host_str, self.dst_port))
 
         start_time = time()
         while True:
+            diff = time() - start_time
+            if diff > self.timeout:
+                break
+
             # Send SYN
-            syn_packet, first_seq_num = build_syn_packet(host_ip, self.src_port,
-                            dest_ip, self.dst_port, self.timeout)
+            syn_packet, first_seq_num = build_syn_packet(self.src_host, self.src_port,
+                            self.dst_host, self.dst_port, self.timeout)
             self.sending_socket.sendall(syn_packet)
             if self.debug:
                 print("connect: sent SYN")
@@ -186,7 +189,7 @@ class MyTcpSocket:
                 continue
                 
             # send ACK
-            ack_packet, seq_num, ack_num = build_ack_packet(host_ip, self.src_port, dest_ip,
+            ack_packet, seq_num, ack_num = build_ack_packet(self.src_host, self.src_port, self.dst_host,
                 self.dst_port, self.timeout, ack_num, seq_num + 1, None)
             self.sending_socket.sendall(ack_packet)
             if self.debug:
