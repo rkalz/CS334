@@ -8,17 +8,20 @@ import socket
 
 from ip_helper import parse_ip_header, verify_checksum
 from tcp_helper import build_syn_packet, parse_tcp_header_response, build_ack_packet, \
-                        _SYN_FLAG, _ACK_FLAG
+                        _SYN_FLAG, _ACK_FLAG, _RST_FLAG
 
 _MIN_HEADER_SIZE = 20
 _MAX_TCP_PACKET_SIZE = 65535
 _IP_PACKET_START = 14
 _TCP_PACKET_START = 20
 _MAX_SEQ_ACK_VAL = 0xFFFFFFFF
+_IPV4_LOOPBACK_VAL = 2130706433
 
 class MyTcpSocket:
     # TODO: Add additional input parameters to allow creating new client sockets from accept?
-    def __init__(self, debug=False, debug_verbose=False):
+    # src and dest parameters will be used by a listener to generate new sockets
+    def __init__(self, debug=False, debug_verbose=False, src_host=None, src_port=None, dst_host=None
+    , dst_port=None):
         # Make sure we're superuser on linux
         if platform != 'linux':
             raise Exception("This code will only work on Linux!")
@@ -43,8 +46,15 @@ class MyTcpSocket:
         self.debug = debug
         self.debug_verbose = debug_verbose
 
-        self.src_host = int(IPv4Address(self._resolve_local_ip()))
-        self.src_port = randint(10000, 65535)
+        self.src_host = src_host
+        if self.src_host is None:
+            self.src_host = int(IPv4Address(self._resolve_local_ip()))
+        
+        self.src_port = src_port
+        if self.src_port is None:
+            # NOTE: Find a way to check if the port is taken, perhaps?
+            # The odds of this occuring seem pretty slim, though
+            self.src_port = randint(10000, 65535)
         if self.debug:
             print("constructor: Host is", str(IPv4Address(self.src_host))
             , "at port", self.src_port)
@@ -60,7 +70,7 @@ class MyTcpSocket:
 
     @staticmethod
     def _resolve_local_ip():
-        # TODO: This is hacky and probably not allowed. Replace it!
+        # TODO: Make sure that this is allowed
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('4.2.0.69', 1337))
         my_ip = s.getsockname()[0]
@@ -76,7 +86,6 @@ class MyTcpSocket:
 
         self.cwnd += 1
 
-    # TODO: Handle RST in here?
     def _get_next_packet(self):
         # Receiving packet gives us MAC and up
         # We will check both IP and TCP
@@ -90,9 +99,11 @@ class MyTcpSocket:
             # Receive a full ethernet frame
             response_packet = self.receiving_socket.recv(1522)
 
-            # Strip MAC layer, remove ethernet padding bytes, 
-            # and extract IP header
-            ip_and_later = response_packet[_IP_PACKET_START:-2]
+            # Strip MAC layer and extract IP header
+            ip_and_later = response_packet[_IP_PACKET_START:]
+            if self.src_host != _IPV4_LOOPBACK_VAL:
+                # Remove ethernet padding if not a loopback packet
+                ip_and_later = ip_and_later[:-2]
             ip_header = ip_and_later[:_MIN_HEADER_SIZE]
 
             # TODO: Change ip member variable to int (why do we need to keep it as a string)
@@ -136,7 +147,7 @@ class MyTcpSocket:
                 # This isn't our TCP packet. Restart.
                 # Multiple sockets connected to the same IP, perhaps?
                 if self.debug_verbose:
-                    print("_get_next_packet: Not our packet", src_port, "->", dest_port)
+                    print("_get_next_packet: Not our packet:", src_port, "->", dest_port)
                 continue
             
             checksum_clear = True
@@ -148,8 +159,14 @@ class MyTcpSocket:
                 continue
                 
             if self.debug:
-                print("_get_next_packet: response received!")
+                print("_get_next_packet: TCP response received")
 
+            if flags & _RST_FLAG:
+                # We got a reset signal, the remote port has closed
+                if self.debug:
+                    print("_get_next_packet: Response was RST!")
+                raise Exception("Connection refused")
+            
             data = None
             # If there are options, remove them from the data
             offset = offset_and_ns >> 4
@@ -159,11 +176,16 @@ class MyTcpSocket:
 
             return seq_num, ack_num, flags, data
                
-        raise Exception("Failed to receive packet in time!")
+        raise Exception("Connection timeout!")
 
     def connect(self, host_and_port_tuple):
         host = host_and_port_tuple[0]
         port = host_and_port_tuple[1]
+
+        host_hostname = socket.gethostbyname(host)
+        if host_hostname[:4] == "127.":
+            # We're using loopback. Set source to localhost.
+            self.src_host = int(IPv4Address("127.0.0.1"))
 
         self.dst_host = int(IPv4Address(socket.gethostbyname(host)))
         self.dst_port = port
@@ -186,8 +208,6 @@ class MyTcpSocket:
 
             # Recieve SYN/ACK (SEQ = X, ACK = 1)
             syn_ack_seq_num, syn_ack_ack_num, flags, _ = self._get_next_packet()
-            if self.debug:
-                print("connect: received a response")
 
             syn_ack_flag = _SYN_FLAG | _ACK_FLAG
             if flags & syn_ack_flag == 0:
@@ -203,6 +223,9 @@ class MyTcpSocket:
                     print("connect: received incorrect ACK! expected",
                     str(1), "got", str(syn_ack_ack_num))
                 continue
+            
+            if self.debug:
+                print("connect: received SYN/ACK")
             self._handle_congestion()
 
             # send ACK (SEQ = 1, ACK = X + 1)
@@ -232,9 +255,9 @@ class MyTcpSocket:
 
     def send(self, data_to_send):
         # All packets have the ACK flag
-        # C - S=1 A=1 D=50 -> S
-        # C <- S=1 A=51 D=100 - S
-        # S - S=51 A=101 -> S
+        # C - S=X A=Y D=50 -> S
+        # C <- S=Y A=X+50 D=100 - S
+        # S - S=X+50+1 A=X+100 -> S
 
         # S = last acq received
         # A = last seq sent + len(last data recv)

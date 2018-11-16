@@ -56,21 +56,21 @@ def build_ip_header(src_addr, dest_addr, ttl, data):
     flags_and_frag_offset = (flags << 13) + fragment_offset
 
     incomplete_header = struct.pack(">BBHHHBBHII",
-                                          ver_and_ihl, dscp_and_ecn, total_length,
-                                          identification, flags_and_frag_offset,
-                                          ttl, protocol, checksum,
-                                          src_addr,
-                                          dest_addr)
+                                    ver_and_ihl, dscp_and_ecn, total_length,
+                                    identification, flags_and_frag_offset,
+                                    ttl, protocol, checksum,
+                                    src_addr,
+                                    dest_addr)
 
     # IP Checksum input doesn't include data
     checksum = compute_checksum(src_addr, dest_addr, incomplete_header)
 
     fragment = struct.pack(">BBHHHBBHII",
-                                          ver_and_ihl, dscp_and_ecn, total_length,
-                                          identification, flags_and_frag_offset,
-                                          ttl, protocol, checksum,
-                                          src_addr,
-                                          dest_addr)
+                            ver_and_ihl, dscp_and_ecn, total_length,
+                            identification, flags_and_frag_offset,
+                            ttl, protocol, checksum,
+                            src_addr,
+                            dest_addr)
     if data is not None:
         fragment += data
 
