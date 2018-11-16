@@ -17,6 +17,7 @@ _TCP_PACKET_START = 20
 _MAX_SEQ_ACK_VAL = 0xFFFFFFFF
 
 class MyTcpSocket:
+    # TODO: Add additional input parameters to allow creating new client sockets from accept?
     def __init__(self, debug=False, debug_verbose=False):
         # Make sure we're superuser on linux
         if platform != 'linux':
@@ -69,6 +70,7 @@ class MyTcpSocket:
     def _handle_congestion(self, didnt_get_ack=False):
         # Congestion handling rules as defined in the project
         # Reset if an ack fails or we hit 1000
+        # Otherwise increment (ACK recevied)
         if self.cwnd == 1000 or didnt_get_ack:
             self.cwnd = 0
 
@@ -229,10 +231,19 @@ class MyTcpSocket:
         self.timeout = new_timeout
 
     def send(self, data_to_send):
+        # All packets have the ACK flag
+        # C - S=1 A=1 D=50 -> S
+        # C <- S=1 A=51 D=100 - S
+        # S - S=51 A=101 -> S
+
+        # S = last acq received
+        # A = last seq sent + len(last data recv)
+        # (Ideally, we will set this at the end of send/recv)
         # send data
         if self.debug:
             print("send: sent data")
 
+        self._handle_congestion()
         # receive ACK
         if self.debug:
             print("send: received ACK")
@@ -240,7 +251,8 @@ class MyTcpSocket:
 
     def recv(self, bytes_to_recv):
         # receive data
-        # TODO: Handle ordering issues (only if we do HTTP)
+        # TODO: Handle ordering issues (hopefully not needed for this)
+        # See notes in send
 
         self._handle_congestion()
         if self.debug:
@@ -253,15 +265,15 @@ class MyTcpSocket:
 
 
     def close(self):
-        # send FIN/ACK
+        # send FIN/ACK (S=X, A=Y)
 
-        # receive ACK
+        # receive ACK (S=Y, A=X+1)
         self._handle_congestion()
 
-        # wait for server FIN/ACK
+        # wait for server FIN/ACK (S=Y, A=X+1)
         self._handle_congestion()
 
-        # send ACK
+        # send ACK (S=X, A=Y+1)
 
         self.sending_socket.close()
         self.receiving_socket.close()
