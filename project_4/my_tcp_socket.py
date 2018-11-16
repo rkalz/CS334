@@ -14,6 +14,7 @@ _MIN_HEADER_SIZE = 20
 _MAX_TCP_PACKET_SIZE = 65535
 _IP_PACKET_START = 14
 _TCP_PACKET_START = 20
+_MAX_SEQ_ACK_VAL = 0xFFFFFFFF
 
 class MyTcpSocket:
     def __init__(self, debug=False, debug_verbose=False):
@@ -174,15 +175,15 @@ class MyTcpSocket:
             if diff > self.timeout:
                 break
 
-            # Send SYN
-            syn_packet, first_seq_num = build_syn_packet(self.src_host, self.src_port,
+            # Send SYN (SEQ = 0, ACK = 0)
+            syn_packet = build_syn_packet(self.src_host, self.src_port,
                             self.dst_host, self.dst_port, self.timeout)
             self.sending_socket.sendall(syn_packet)
             if self.debug:
                 print("connect: sent SYN")
 
-            # Recieve SYN/ACK
-            seq_num, ack_num, flags, _ = self._get_next_packet()
+            # Recieve SYN/ACK (SEQ = X, ACK = 1)
+            syn_ack_seq_num, syn_ack_ack_num, flags, _ = self._get_next_packet()
             if self.debug:
                 print("connect: received a response")
 
@@ -193,23 +194,26 @@ class MyTcpSocket:
                 if self.debug:
                     print("connect: did not receieve a SYN/ACK packet")
                 continue
-            if ack_num != first_seq_num + 1:
+            if syn_ack_ack_num != 1:
                 # This isn't the ACK we're looking for
                 # Send a new SYN
                 if self.debug:
                     print("connect: received incorrect ACK! expected",
-                    str(first_seq_num + 1), "got", str(ack_num))
+                    str(1), "got", str(syn_ack_ack_num))
                 continue
             self._handle_congestion()
 
-            # send ACK
-            ack_packet, seq_num, ack_num = build_ack_packet(self.src_host, self.src_port, self.dst_host,
-                self.dst_port, self.timeout, ack_num, seq_num + 1, None)
+            # send ACK (SEQ = 1, ACK = X + 1)
+            ack_seq_num = 1
+            ack_ack_num = (syn_ack_seq_num + 1) % _MAX_SEQ_ACK_VAL
+            ack_packet, _, _ = build_ack_packet(self.src_host, self.src_port, self.dst_host,
+                self.dst_port, self.timeout, ack_seq_num, ack_ack_num, None)
             self.sending_socket.sendall(ack_packet)
             if self.debug:
                 print("connect: sent ACK packet")
 
-            # TODO: Store seq and ack for send and recv
+            self.seq_num = ack_seq_num
+            self.ack_num = ack_ack_num
 
             # We did everything successfully! End the loop
             self.is_connected = True

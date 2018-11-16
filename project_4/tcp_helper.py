@@ -16,7 +16,7 @@ _NS_FLAG = 256
 def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, seq_num, ack_num, data):
     if seq_num is None:
         # If no seq, make one
-        seq_num = 1000
+        seq_num = 0
     if ack_num is None:
         # If no ack, set to zero
         ack_num = 0
@@ -54,10 +54,10 @@ def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, seq_num, 
 
 
 def build_syn_packet(src_addr, src_port, dest_addr, dest_port, ttl):
-    syn_tcp_component, seq_num, _ = \
+    syn_tcp_component, _, _ = \
         _build_tcp_header(_SYN_FLAG, src_addr, src_port, dest_addr, dest_port, None, None, None)
     full_ip_packet = build_ip_header(src_addr, dest_addr, ttl, syn_tcp_component)
-    return full_ip_packet, seq_num
+    return full_ip_packet
 
 def build_ack_packet(src_addr, src_port, dest_addr, dest_port, ttl, seq_num, ack_num, data):
     ack_tcp_component, seq_num, ack_num = \
