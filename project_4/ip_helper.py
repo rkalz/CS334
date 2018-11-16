@@ -12,7 +12,7 @@ def verify_checksum(src_addr, dest_addr, ip_segment):
 def compute_checksum(src_addr, dest_addr, ip_segment):
     # Make segment even length
     if len(ip_segment) & 1:
-        ip_segment += 0
+        ip_segment += b'\x00'
 
     # Build pseudoheader and thing to calc
     pseudo_header = struct.pack(">IIBBH", src_addr, dest_addr, 0, IPPROTO_TCP, len(ip_segment))

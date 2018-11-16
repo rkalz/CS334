@@ -8,7 +8,7 @@ import socket
 
 from ip_helper import parse_ip_header, verify_checksum
 from tcp_helper import build_syn_packet, parse_tcp_header_response, build_ack_packet, \
-                        _SYN_FLAG, _ACK_FLAG, _RST_FLAG
+                        _SYN_FLAG, _ACK_FLAG, _RST_FLAG, build_psh_ack_packet
 
 _MIN_HEADER_SIZE = 20
 _MAX_TCP_PACKET_SIZE = 65535
@@ -65,8 +65,9 @@ class MyTcpSocket:
         self.is_connected = False
 
         self.cwnd = 0
-        self.seq_num = 0
-        self.ack_num = 0
+        self.last_seq_sent = 0
+        self.last_ack_recv = 0
+        self.last_data_recv = 0
 
     @staticmethod
     def _resolve_local_ip():
@@ -127,15 +128,14 @@ class MyTcpSocket:
                     ,packet_type_str)
                 continue
 
-            checksum_clear = True
-            # checksum_clear = verify_checksum(packet_src, packet_dst, ip_header)
+            checksum_clear = verify_checksum(packet_src, packet_dst, ip_header)
             if not checksum_clear:
                 # Packet did not pass checksum. 
-                # NOTE: Should never happen unless Blackburn does it on purpose
-                # Just try again (we should get a retransmission)
-                if self.debug_verbose:
+                if self.debug:
                     print("_get_next_packet: IP checksum failed!")
-                continue
+                if not self.debug and not self.debug_verbose:
+                    # Turns out lots of utilities don't send correct checksums
+                    continue
             
             # Make sure this is a TCP packet meant for us
             tcp_header_and_data = ip_and_later[_TCP_PACKET_START:]
@@ -150,13 +150,14 @@ class MyTcpSocket:
                     print("_get_next_packet: Not our packet:", src_port, "->", dest_port)
                 continue
             
-            checksum_clear = True
-            # checksum_clear = verify_checksum(packet_src, packet_dst, tcp_header_and_data)
+            checksum_clear = verify_checksum(packet_src, packet_dst, tcp_header_and_data)
             if not checksum_clear:
                 # See notes on IP checksum
-                if self.debug_verbose:
+                if self.debug:
                     print("_get_next_packet: TCP checksum failed!")
-                continue
+                if not self.debug and not self.debug_verbose:
+                    # Turns out lots of utilities don't send correct checksums
+                    continue
                 
             if self.debug:
                 print("_get_next_packet: TCP response received")
@@ -237,8 +238,9 @@ class MyTcpSocket:
             if self.debug:
                 print("connect: sent ACK packet")
 
-            self.seq_num = ack_seq_num
-            self.ack_num = ack_ack_num
+            self.last_seq_sent = ack_ack_num
+            self.last_ack_recv = ack_seq_num
+            self.last_data_recv = 0
 
             # We did everything successfully! End the loop
             self.is_connected = True
@@ -261,18 +263,51 @@ class MyTcpSocket:
 
         # S = last acq received
         # A = last seq sent + len(last data recv)
-        # (Ideally, we will set this at the end of send/recv)
+        
         # send data
-        if self.debug:
-            print("send: sent data")
+        data_seq_num = self.last_ack_recv
+        data_ack_num = self.last_seq_sent + self.last_data_recv
 
-        self._handle_congestion()
-        # receive ACK
-        if self.debug:
-            print("send: received ACK")
-        pass
+        start_time = time()
+        while True:
+            diff = time() - start_time
+            if diff > self.timeout:
+                raise Exception("Connection timeout")
 
-    def recv(self, bytes_to_recv):
+            # TODO: Handle data that's too large to send in one packet
+            # The PSH flag tells the remote that there's no more data to be sent
+            data_packet, _, _ = build_psh_ack_packet(self.src_host, self.src_port, 
+                        self.dst_host, self.dst_port, self.timeout, data_seq_num, 
+                        data_ack_num, data_to_send)
+            self.sending_socket.sendall(data_packet)
+            if self.debug:
+                print("send: sent data")
+
+            # receive ACK
+            ack_seq_num, ack_ack_num, ack_flags, _ = self._get_next_packet()
+            if ack_flags != _ACK_FLAG:
+                # This isn't an ACK!
+                if self.debug:
+                    print("send: Packet received, but it wasn't an ACK")
+                continue
+            if ack_seq_num != data_seq_num and ack_ack_num != self.last_ack_recv + len(data_to_send):
+                # The SEQ and ACK numbers aren't correct
+                if self.debug:
+                    print("send: Received incorrect SEQ and ACK nums")
+                continue
+            
+            self.last_ack_recv = ack_ack_num
+
+            self._handle_congestion()
+            if self.debug:
+                print("send: received ACK")
+            return
+        
+        # Never got our ACK
+        self._handle_congestion(True)
+        raise Exception("Connection timeout!")
+
+    def recv(self, bytes_to_recv=0):
         # receive data
         # TODO: Handle ordering issues (hopefully not needed for this)
         # See notes in send
@@ -306,7 +341,11 @@ class MyTcpSocket:
 
 if __name__ == "__main__":
     # BUG: If a MyTcpSocket object is named socket, gethostbyname will fail
-    s = MyTcpSocket(True, True)
-    s.connect(("35.237.70.67", 80)) # Apache web server hosted on GCP that
-                                    # not using for anything atm. Good for testing!
+    s = MyTcpSocket(True, False)
+    # s.connect(("35.237.70.67", 80)) # Apache web server hosted on GCP that
+                                      # not using for anything atm. Good for testing!
 
+    # Install netcat and start an echo server with
+    # ncat -l 2000 -k -c 'xargs -n1 echo'
+    s.connect(("127.0.0.1", 2000))
+    s.send("hello".encode(encoding='ascii'))

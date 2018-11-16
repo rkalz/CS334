@@ -40,6 +40,9 @@ def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, seq_num, 
         incomplete_segment += data
 
     checksum = compute_checksum(src_addr, dest_addr, incomplete_segment)
+    if data is not None:
+        # BUG: Checksum appears to be off by one if we send data. Not good.
+        checksum += 1
 
     segment = struct.pack(">HHIIBBHHH",
                               src_port, dest_port,
@@ -65,6 +68,12 @@ def build_ack_packet(src_addr, src_port, dest_addr, dest_port, ttl, seq_num, ack
     full_ip_packet = build_ip_header(src_addr, dest_addr, ttl, ack_tcp_component)
     return full_ip_packet, seq_num, ack_num
 
+def build_psh_ack_packet(src_addr, src_port, dest_addr, dest_port, ttl, seq_num, ack_num, data):
+    ack_tcp_component, seq_num, ack_num = \
+        _build_tcp_header(_PSH_FLAG | _ACK_FLAG, src_addr, src_port, dest_addr, dest_port, seq_num, ack_num, data)
+    full_ip_packet = build_ip_header(src_addr, dest_addr, ttl, ack_tcp_component)
+    return full_ip_packet, seq_num, ack_num
+    
 def parse_tcp_header_response(data):
     tcp_header = struct.unpack(">HHIIBBHHH", data)
 
