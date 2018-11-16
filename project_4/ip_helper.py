@@ -5,6 +5,7 @@ _DONT_FRAGMENT = 2
 _ADDITIONAL_FRAGMENTS = 1
 
 def verify_checksum(src_addr, dest_addr, ip_segment):
+    # BUG: This doesn't work
     computed_checksum = compute_checksum(src_addr, dest_addr, ip_segment)
     return computed_checksum == 0
 
@@ -61,16 +62,15 @@ def build_ip_header(src_addr, dest_addr, ttl, data):
     dscp_and_ecn = (dscp << 2) + ecn
     flags_and_frag_offset = (flags << 13) + fragment_offset
 
-    incomplete_fragment = struct.pack(">BBHHHBBHII",
+    incomplete_header = struct.pack(">BBHHHBBHII",
                                           ver_and_ihl, dscp_and_ecn, total_length,
                                           identification, flags_and_frag_offset,
                                           ttl, protocol, checksum,
                                           src_addr,
                                           dest_addr)
-    if data is not None:
-        incomplete_fragment += data
 
-    checksum = compute_checksum(src_addr, dest_addr, incomplete_fragment)
+    # IP Checksum input doesn't include data
+    checksum = compute_checksum(src_addr, dest_addr, incomplete_header)
 
     fragment = struct.pack(">BBHHHBBHII",
                                           ver_and_ihl, dscp_and_ecn, total_length,

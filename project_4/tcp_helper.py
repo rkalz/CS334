@@ -13,14 +13,13 @@ _CWR_FLAG = 128
 _NS_FLAG = 256
 
 
-def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, seq_num, data):
-    ack_num = 0
+def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, seq_num, ack_num, data):
     if seq_num is None:
-        # If no syn, make one
+        # If no seq, make one
         seq_num = 1000
-    else:
-        # If syn, set
-        ack_num = seq_num + 1
+    if ack_num is None:
+        # If no ack, set to zero
+        ack_num = 0
     data_offset = 5                      # header_length / 4, we don't need options to send
     window_size = (1 << 16) - 1          # TODO: fix this?
     checksum = 0
@@ -37,6 +36,7 @@ def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, seq_num, 
                                          offset_and_ns, flags, window_size,
                                          checksum, urg_ptr)
     if data is not None:
+        # TCP checksum *does* include data
         incomplete_segment += data
 
     checksum = compute_checksum(src_addr, dest_addr, incomplete_segment)
@@ -54,16 +54,16 @@ def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, seq_num, 
 
 
 def build_syn_packet(src_addr, src_port, dest_addr, dest_port, ttl):
-    syn_tcp_component, _, _ = \
-        _build_tcp_header(_SYN_FLAG, src_addr, src_port, dest_addr, dest_port, None, None)
+    syn_tcp_component, seq_num, _ = \
+        _build_tcp_header(_SYN_FLAG, src_addr, src_port, dest_addr, dest_port, None, None, None)
     full_ip_packet = build_ip_header(src_addr, dest_addr, ttl, syn_tcp_component)
-    return full_ip_packet
+    return full_ip_packet, seq_num
 
-def build_ack_packet(src_addr, src_port, dest_addr, dest_port, ttl, seq_num, data):
-    ack_tcp_component, _, _ = \
-        _build_tcp_header(_ACK_FLAG, src_addr, src_port, dest_addr, dest_port, seq_num, data)
+def build_ack_packet(src_addr, src_port, dest_addr, dest_port, ttl, seq_num, ack_num, data):
+    ack_tcp_component, seq_num, ack_num = \
+        _build_tcp_header(_ACK_FLAG, src_addr, src_port, dest_addr, dest_port, seq_num, ack_num, data)
     full_ip_packet = build_ip_header(src_addr, dest_addr, ttl, ack_tcp_component)
-    return full_ip_packet
+    return full_ip_packet, seq_num, ack_num
 
 def parse_tcp_header_response(data):
     tcp_header = struct.unpack(">HHIIBBHHH", data)
@@ -78,4 +78,4 @@ def parse_tcp_header_response(data):
     checksum = tcp_header[7]
     urg_ptr = tcp_header[8]
 
-    return src_port, dest_port, seq_num, ack_num, flags, window_size, checksum
+    return src_port, dest_port, seq_num, ack_num, offset_and_ns, flags, window_size, checksum

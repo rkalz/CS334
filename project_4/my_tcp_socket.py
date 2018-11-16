@@ -7,12 +7,13 @@ from time import sleep, time
 import socket
 
 from ip_helper import parse_ip_header, verify_checksum
-from tcp_helper import build_syn_packet, parse_tcp_header_response, build_ack_packet
+from tcp_helper import build_syn_packet, parse_tcp_header_response, build_ack_packet, \
+                        _SYN_FLAG, _ACK_FLAG
 
 _MIN_HEADER_SIZE = 20
 _MAX_TCP_PACKET_SIZE = 65535
 _IP_PACKET_START = 14
-_TCP_PACKET_START = 35
+_TCP_PACKET_START = 20
 
 class MyTcpSocket:
     def __init__(self, debug=False, debug_verbose=False):
@@ -27,6 +28,10 @@ class MyTcpSocket:
         system("sudo iptables -A OUTPUT -p tcp --tcp-flags RST RST -j DROP")
 
         self.sending_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+
+        # ETH_P_IP (0x0800) - The kernel will give us IP packets
+        # The incoming packets will have MAC (but we don't have to check MAC to see if the packets
+        # are IP or not)
         self.receiving_socket = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0800))
 
         self.debug = debug
@@ -42,6 +47,8 @@ class MyTcpSocket:
         self.timeout = 60
         self.is_connected = False
 
+        self.seq_num = 0
+        self.ack_num = 0
 
     @staticmethod
     def _resolve_local_ip():
@@ -63,23 +70,37 @@ class MyTcpSocket:
             if diff > self.timeout:
                 break
 
-            response_packet = self.receiving_socket.recv(65535)
+            # Receive a full ethernet frame
+            response_packet = self.receiving_socket.recv(1522)
 
-            # Strip MAC layer and extract IP header
-            ip_and_later = response_packet[_IP_PACKET_START:]
+            # Strip MAC layer, remove ethernet padding bytes, 
+            # and extract IP header
+            ip_and_later = response_packet[_IP_PACKET_START:-2]
             ip_header = ip_and_later[:_MIN_HEADER_SIZE]
 
+            # TODO: Change ip member variable to int (why do we need to keep it as a string)
             packet_src, packet_dst, packet_type = parse_ip_header(ip_header)
             packet_src_str = str(IPv4Address(packet_src))
             packet_dst_str = str(IPv4Address(packet_dst))
             if packet_type != socket.IPPROTO_TCP or packet_src_str != self.dst_host \
                 or packet_dst_str != self.src_host:
-                # Not our packet, boss. Wait for another one.
+                # Either it's not TCP, sent by a different source, and/or meant for a 
+                # different IP
                 if self.debug_verbose:
-                    print("_get_next_packet: Wrong packet:", packet_src_str, "->", packet_dst_str)
+                    # Find out what packet we picked up for lols
+                    packet_type_str = str(packet_type)
+                    if packet_type == socket.IPPROTO_TCP:
+                        packet_type_str = "TCP"
+                    elif packet_type == socket.IPPROTO_UDP:
+                        packet_type_str = "UDP"
+
+                    packet_type_str = "(" + packet_type_str + ")"
+                    print("_get_next_packet: Not our packet:", packet_src_str, "->", packet_dst_str
+                    ,packet_type_str)
                 continue
 
-            checksum_clear = verify_checksum(packet_src, packet_dst, ip_and_later)
+            checksum_clear = True
+            # checksum_clear = verify_checksum(packet_src, packet_dst, ip_header)
             if not checksum_clear:
                 # Packet did not pass checksum. 
                 # NOTE: Should never happen unless Blackburn does it on purpose
@@ -88,13 +109,39 @@ class MyTcpSocket:
                     print("_get_next_packet: IP checksum failed!")
                 continue
             
+            # Make sure this is a TCP packet meant for us
+            tcp_header_and_data = ip_and_later[_TCP_PACKET_START:]
+            tcp_header = tcp_header_and_data[:_MIN_HEADER_SIZE]
+            src_port, dest_port, seq_num, ack_num, offset_and_ns, \
+            flags, window_size, checksum = parse_tcp_header_response(tcp_header)
+                
+            if src_port != self.dst_port and dest_port != self.src_port:
+                # This isn't our TCP packet. Try again.
+                # Multiple sockets connected to the same IP, perhaps?
+                if self.debug_verbose:
+                    print("_get_next_packet: Not our packet", src_port, "->", dest_port)
+                continue
+            
+            checksum_clear = True
+            # checksum_clear = verify_checksum(packet_src, packet_dst, tcp_header_and_data)
+            if not checksum_clear:
+                # See notes on IP checksum
+                if self.debug_verbose:
+                    print("_get_next_packet: TCP checksum failed!")
+                continue
+                
             if self.debug:
                 print("_get_next_packet: response received!")
-            
-            tcp_header_and_data = response_packet[_TCP_PACKET_START:]
-            return tcp_header_and_data
+
+            data = None
+            # If there are options, remove them from the data
+            offset = offset_and_ns >> 4
+            total_header_size = 4 * offset
+            if total_header_size > _MIN_HEADER_SIZE:
+                data = tcp_header_and_data[total_header_size:]
+
+            return seq_num, ack_num, flags, data
                
-        
         raise Exception("Failed to receive packet in time!")
 
     def connect(self, host_and_port_tuple):
@@ -112,36 +159,40 @@ class MyTcpSocket:
         start_time = time()
         while True:
             # Send SYN
-            syn_packet = build_syn_packet(host_ip, self.src_port,
+            syn_packet, first_seq_num = build_syn_packet(host_ip, self.src_port,
                             dest_ip, self.dst_port, self.timeout)
             self.sending_socket.sendall(syn_packet)
             if self.debug:
                 print("connect: sent SYN")
 
             # Recieve SYN/ACK
-            response_packet = self._get_next_packet()
+            seq_num, ack_num, flags, _ = self._get_next_packet()
             if self.debug:
                 print("connect: received a response")
 
-            tcp_packet_header = response_packet[:_MIN_HEADER_SIZE]
-            src_port, dest_port, seq_num, ack_num, flags, window_size, checksum = \
-                parse_tcp_header_response(tcp_packet_header)
-
-            # TODO: Check type of incoming packet, checksum, etc
-
-            if src_port != self.dst_port and dest_port != src_port:
-                # This TCP packet was meant for someone else, try again
+            syn_ack_flag = _SYN_FLAG | _ACK_FLAG
+            if flags & syn_ack_flag == 0:
+                # This isn't a SYN/ACK packet and thus not the packet we're looking for
+                # Send a new SYN
                 if self.debug:
-                    print("connect: Reading someone else's TCP header")
+                    print("connect: did not receieve a SYN/ACK packet")
+                continue
+            if ack_num != first_seq_num + 1:
+                # This isn't the ACK we're looking for
+                # Send a new SYN
+                if self.debug:
+                    print("connect: received incorrect ACK! expected", 
+                    str(first_seq_num + 1), "got", str(ack_num))
                 continue
                 
-
             # send ACK
-            ack_packet = build_ack_packet(host_ip, self.src_port, 
-                            dest_ip, self.dst_port, self.timeout, ack_num, None)
+            ack_packet, seq_num, ack_num = build_ack_packet(host_ip, self.src_port, dest_ip,
+                self.dst_port, self.timeout, ack_num, seq_num + 1, None)
             self.sending_socket.sendall(ack_packet)
             if self.debug:
                 print("connect: sent ACK packet")
+
+            # TODO: Store seq and ack for send and recv
 
             # We did everything successfully! End the loop
             self.is_connected = True
@@ -167,7 +218,6 @@ class MyTcpSocket:
 
     def recv(self, bytes_to_recv):
         # receive data
-        # TODO: What flags are needed on a data packet?
         # TODO: Handle ordering issues (only if we do HTTP)
         if self.debug:
             print("recv: received data")
