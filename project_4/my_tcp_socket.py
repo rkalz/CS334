@@ -65,12 +65,10 @@ class MyTcpSocket:
         self.cwnd = 0
 
         # TODO: Better method of handling this information
-        self.last_seq_sent = 0
         self.last_seq_recv = 0
-        self.last_ack_sent = 0
         self.last_ack_recv = 0
-        self.last_data_sent = 0
         self.last_data_recv = 0
+
 
     @staticmethod
     def _resolve_local_ip():
@@ -212,8 +210,6 @@ class MyTcpSocket:
             syn_packet = build_syn_packet(self.src_host, self.src_port,
                             self.dst_host, self.dst_port, self.timeout)
             self.sending_socket.sendall(syn_packet)
-            self.last_seq_sent = 0
-            self.last_ack_sent = 0
 
             if self.debug:
                 print("connect: sent SYN")
@@ -235,8 +231,10 @@ class MyTcpSocket:
                     print("connect: received incorrect ACK! expected",
                     str(1), "got", str(syn_ack_ack_num))
                 continue
+            
             self.last_seq_recv = syn_ack_seq_num
             self.last_ack_recv = syn_ack_ack_num
+            self.last_data_recv = 1
             
             if self.debug:
                 print("connect: received SYN/ACK")
@@ -250,10 +248,6 @@ class MyTcpSocket:
             self.sending_socket.sendall(ack_packet)
             if self.debug:
                 print("connect: sent ACK packet")
-
-            self.last_seq_sent = ack_seq_num
-            self.last_ack_sent = ack_ack_num
-            self.last_data_recv = 1
 
             # We did everything successfully! End the loop
             self.is_connected = True
@@ -274,7 +268,7 @@ class MyTcpSocket:
 
         # send data
         data_seq_num = self.last_ack_recv
-        data_ack_num = (self.last_seq_recv + self.last_data_recv) % _MAX_SEQ_ACK_VAL
+        data_ack_num = (self.last_seq_recv + self.last_data_recv) % _MAX_SEQ_ACK_VAL 
 
         start_time = time()
         while True:
@@ -290,10 +284,6 @@ class MyTcpSocket:
                         data_ack_num, data_to_send)
             self.sending_socket.sendall(data_packet)
 
-            self.last_seq_sent = data_seq_num
-            self.last_ack_sent = data_ack_num
-            self.last_data_sent = len(data_to_send)
-
             if self.debug:
                 print("send: sent data")
 
@@ -304,13 +294,12 @@ class MyTcpSocket:
                 if self.debug:
                     print("send: Packet received, but it wasn't an ACK")
                 continue
-            if ack_seq_num != data_seq_num and \
-                ack_ack_num != (self.last_ack_recv + len(data_to_send)) % _MAX_SEQ_ACK_VAL:
+            if ack_seq_num != data_ack_num and \
+                ack_ack_num != (data_seq_num + len(data_to_send)) % _MAX_SEQ_ACK_VAL:
                 # The SEQ and ACK numbers aren't correct
                 if self.debug:
                     print("send: Received incorrect SEQ and ACK nums")
                 continue
-            
             self.last_seq_recv = ack_seq_num
             self.last_ack_recv = ack_ack_num
 
@@ -365,14 +354,11 @@ class MyTcpSocket:
             
             # send ACK
             ack_confirm_seq_num = self.last_ack_recv
-            ack_confirm_ack_num = (self.last_ack_sent + self.last_data_sent) % _MAX_SEQ_ACK_VAL
+            ack_confirm_ack_num = (self.last_seq_recv + self.last_data_recv) % _MAX_SEQ_ACK_VAL
             ack_confirm_recv = build_ack_packet(self.src_host, self.src_port, 
                         self.dst_host, self.dst_port, self.timeout, ack_confirm_seq_num, 
                         ack_confirm_ack_num, None)
             self.sending_socket.sendall(ack_confirm_recv)
-
-            self.last_seq_sent = ack_confirm_seq_num
-            self.last_ack_sent = ack_confirm_ack_num
 
             if self.debug:
                 print("recv: sent ACK")
@@ -389,8 +375,8 @@ class MyTcpSocket:
         if not self.is_connected:
             raise Exception("Cannot close a socket that's already closed!")
 
-        fin_ack_seq_num = self.last_seq_recv
-        fin_ack_ack_num = self.last_ack_recv
+        fin_ack_seq_num = self.last_ack_recv
+        fin_ack_ack_num = (self.last_seq_recv + self.last_data_recv) % _MAX_SEQ_ACK_VAL
 
         start_time = time()
         while True:
@@ -402,8 +388,6 @@ class MyTcpSocket:
             fin_ack_to_send = build_fin_ack_packet(self.src_host, self.src_port, self.dst_host, 
                               self.dst_port, self.timeout, fin_ack_seq_num, fin_ack_ack_num)
             self.sending_socket.sendall(fin_ack_to_send)
-            self.last_seq_sent = fin_ack_seq_num
-            self.last_ack_sent = fin_ack_ack_num
             if self.debug:
                 print("close: FIN/ACK sent")
 
@@ -416,8 +400,8 @@ class MyTcpSocket:
                 if self.debug:
                     print("close: Packet received but it wasn't FIN/ACK")
                 continue
-            if fin_ack_resp_seq_num != self.last_ack_sent \
-                and fin_ack_resp_ack_num != (self.last_seq_sent + 1) % _MAX_SEQ_ACK_VAL:
+            if fin_ack_resp_seq_num != fin_ack_ack_num \
+                and fin_ack_resp_ack_num != (fin_ack_seq_num + 1) % _MAX_SEQ_ACK_VAL:
                 if self.debug:
                     print("close: FIN/ACK received but the SEQ/ACK numbers aren't right")
                 continue
@@ -459,7 +443,9 @@ if __name__ == "__main__":
     resp = s.recv()
     print("Response:", resp)
 
-    # TODO: Fix SEQ and ACK math
+    # NOTE: Sometimes ncat will send back a PSH/ACK after a data ACK instead of 
+    # a non data ACK and then a PSH/ACK. This will appear as spurious retransmission
+    # in Wireshark (and a debug messaage here that we got a non-ACK response)
     s.send("there\n".encode())
     resp = s.recv()
     print("Response:", resp)
