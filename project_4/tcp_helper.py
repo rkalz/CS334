@@ -63,16 +63,22 @@ def build_syn_packet(src_addr, src_port, dest_addr, dest_port, ttl):
     return full_ip_packet
 
 def build_ack_packet(src_addr, src_port, dest_addr, dest_port, ttl, seq_num, ack_num, data):
-    ack_tcp_component, seq_num, ack_num = \
+    ack_tcp_component, _, _ = \
         _build_tcp_header(_ACK_FLAG, src_addr, src_port, dest_addr, dest_port, seq_num, ack_num, data)
     full_ip_packet = build_ip_header(src_addr, dest_addr, ttl, ack_tcp_component)
-    return full_ip_packet, seq_num, ack_num
+    return full_ip_packet
 
 def build_psh_ack_packet(src_addr, src_port, dest_addr, dest_port, ttl, seq_num, ack_num, data):
-    ack_tcp_component, seq_num, ack_num = \
+    ack_tcp_component, _, _ = \
         _build_tcp_header(_PSH_FLAG | _ACK_FLAG, src_addr, src_port, dest_addr, dest_port, seq_num, ack_num, data)
     full_ip_packet = build_ip_header(src_addr, dest_addr, ttl, ack_tcp_component)
-    return full_ip_packet, seq_num, ack_num
+    return full_ip_packet
+
+def build_fin_ack_packet(src_addr, src_port, dest_addr, dest_port, ttl, seq_num, ack_num):
+    fin_ack_tcp_component, _, _ = \
+        _build_tcp_header(_FIN_FLAG | _ACK_FLAG, src_addr, src_port, dest_addr, dest_port, seq_num, ack_num, None)
+    full_ip_packet = build_ip_header(src_addr, dest_addr, ttl, fin_ack_tcp_component)
+    return full_ip_packet
     
 def parse_tcp_header_response(data):
     tcp_header = struct.unpack(">HHIIBBHHH", data)

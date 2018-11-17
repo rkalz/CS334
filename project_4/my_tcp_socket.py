@@ -8,7 +8,8 @@ import socket
 
 from ip_helper import parse_ip_header, verify_checksum
 from tcp_helper import build_syn_packet, parse_tcp_header_response, build_ack_packet, \
-                        _SYN_FLAG, _ACK_FLAG, _RST_FLAG, build_psh_ack_packet, _PSH_FLAG
+                        _SYN_FLAG, _ACK_FLAG, _RST_FLAG, build_psh_ack_packet, _PSH_FLAG, \
+                        build_fin_ack_packet, _FIN_FLAG
 
 _MIN_HEADER_SIZE = 20
 _MAX_TCP_PACKET_SIZE = 65535
@@ -111,7 +112,6 @@ class MyTcpSocket:
                 ip_and_later = ip_and_later[:-2]
             ip_header = ip_and_later[:_MIN_HEADER_SIZE]
 
-            # TODO: Change ip member variable to int (why do we need to keep it as a string)
             packet_src, packet_dst, packet_type = parse_ip_header(ip_header)
             if packet_type != socket.IPPROTO_TCP or packet_src != self.dst_host \
                 or packet_dst != self.src_host:
@@ -185,6 +185,9 @@ class MyTcpSocket:
         raise Exception("Connection timeout!")
 
     def connect(self, host, port):
+        if self.is_connected:
+            raise Exception("Already connected!")
+
         host_hostname = socket.gethostbyname(host)
         if host_hostname[:4] == "127.":
             # We're using loopback. Set source to localhost.
@@ -242,7 +245,7 @@ class MyTcpSocket:
             # send ACK (SEQ = 1, ACK = X + 1)
             ack_seq_num = 1
             ack_ack_num = (syn_ack_seq_num + 1) % _MAX_SEQ_ACK_VAL
-            ack_packet, _, _ = build_ack_packet(self.src_host, self.src_port, self.dst_host,
+            ack_packet = build_ack_packet(self.src_host, self.src_port, self.dst_host,
                 self.dst_port, self.timeout, ack_seq_num, ack_ack_num, None)
             self.sending_socket.sendall(ack_packet)
             if self.debug:
@@ -266,9 +269,12 @@ class MyTcpSocket:
         self.timeout = new_timeout
 
     def send(self, data_to_send):
+        if not self.is_connected:
+            raise Exception("Cannot send data on a closed socket!")
+
         # send data
         data_seq_num = self.last_ack_recv
-        data_ack_num = self.last_seq_recv + self.last_data_recv
+        data_ack_num = (self.last_seq_recv + self.last_data_recv) % _MAX_SEQ_ACK_VAL
 
         start_time = time()
         while True:
@@ -277,8 +283,9 @@ class MyTcpSocket:
                 raise Exception("Connection timeout")
 
             # TODO: Handle data that's too large to send in one packet
+            # NOTE: Split packets and send all but last with ACK only, send last with PSH/ACK
             # The PSH flag tells the remote that there's no more data to be sent
-            data_packet, _, _ = build_psh_ack_packet(self.src_host, self.src_port, 
+            data_packet = build_psh_ack_packet(self.src_host, self.src_port, 
                         self.dst_host, self.dst_port, self.timeout, data_seq_num, 
                         data_ack_num, data_to_send)
             self.sending_socket.sendall(data_packet)
@@ -297,7 +304,8 @@ class MyTcpSocket:
                 if self.debug:
                     print("send: Packet received, but it wasn't an ACK")
                 continue
-            if ack_seq_num != data_seq_num and ack_ack_num != self.last_ack_recv + len(data_to_send):
+            if ack_seq_num != data_seq_num and \
+                ack_ack_num != (self.last_ack_recv + len(data_to_send)) % _MAX_SEQ_ACK_VAL:
                 # The SEQ and ACK numbers aren't correct
                 if self.debug:
                     print("send: Received incorrect SEQ and ACK nums")
@@ -319,6 +327,9 @@ class MyTcpSocket:
         # receive data
         # TODO: Handle ordering issues (hopefully not needed for this)
         # See notes in send
+
+        if not self.is_connected:
+            raise Exception("Cannot receive data on a closed socket!")
 
         start_time = time()
         while True:
@@ -354,8 +365,8 @@ class MyTcpSocket:
             
             # send ACK
             ack_confirm_seq_num = self.last_ack_recv
-            ack_confirm_ack_num = self.last_ack_sent + self.last_data_sent
-            ack_confirm_recv, _, _ = build_ack_packet(self.src_host, self.src_port, 
+            ack_confirm_ack_num = (self.last_ack_sent + self.last_data_sent) % _MAX_SEQ_ACK_VAL
+            ack_confirm_recv = build_ack_packet(self.src_host, self.src_port, 
                         self.dst_host, self.dst_port, self.timeout, ack_confirm_seq_num, 
                         ack_confirm_ack_num, None)
             self.sending_socket.sendall(ack_confirm_recv)
@@ -369,26 +380,70 @@ class MyTcpSocket:
 
             return resp_data
         
-        # Didn't get a response in time
+        # Never got a FIN/ACK
         self._handle_congestion(True)
         raise Exception("Connection timeout!")
 
 
     def close(self):
-        # send FIN/ACK (S=X, A=Y)
+        if not self.is_connected:
+            raise Exception("Cannot close a socket that's already closed!")
 
-        # receive ACK (S=Y, A=X+1)
-        self._handle_congestion()
+        fin_ack_seq_num = self.last_seq_recv
+        fin_ack_ack_num = self.last_ack_recv
 
-        # wait for server FIN/ACK (S=Y, A=X+1)
-        self._handle_congestion()
+        start_time = time()
+        while True:
+            diff = time() - start_time
+            if diff > self.timeout:
+                raise Exception("Connection timeout!")
 
-        # send ACK (S=X, A=Y+1)
+            # send FIN/ACK (S=X, A=Y)
+            fin_ack_to_send = build_fin_ack_packet(self.src_host, self.src_port, self.dst_host, 
+                              self.dst_port, self.timeout, fin_ack_seq_num, fin_ack_ack_num)
+            self.sending_socket.sendall(fin_ack_to_send)
+            self.last_seq_sent = fin_ack_seq_num
+            self.last_ack_sent = fin_ack_ack_num
+            if self.debug:
+                print("close: FIN/ACK sent")
 
-        self.sending_socket.close()
-        self.receiving_socket.close()
-        self.is_connected = False
-        pass
+            # wait for server FIN/ACK (S=Y, A=X+1)
+            # NOTE: Is there an ACK between client FIN/ACK and server FIN/ACK?
+            # We could just ignore it since the SEQ/ACK nums appear to be the same...
+            fin_ack_resp_seq_num, fin_ack_resp_ack_num, fin_ack_resp_flags, _ = self._get_next_packet()
+            fin_ack_flag = _FIN_FLAG | _ACK_FLAG
+            if not (fin_ack_resp_flags & fin_ack_flag):
+                if self.debug:
+                    print("close: Packet received but it wasn't FIN/ACK")
+                continue
+            if fin_ack_resp_seq_num != self.last_ack_sent \
+                and fin_ack_resp_ack_num != (self.last_seq_sent + 1) % _MAX_SEQ_ACK_VAL:
+                if self.debug:
+                    print("close: FIN/ACK received but the SEQ/ACK numbers aren't right")
+                continue
+            if self.debug:
+                print("recv: server FIN/ACK received")
+            
+            self.last_seq_recv = fin_ack_resp_seq_num
+            self.last_ack_recv = fin_ack_resp_ack_num
+            self._handle_congestion()
+
+            # send ACK (S=X+1, A=Y+1)
+            end_ack_seq_num = (fin_ack_seq_num + 1) % _MAX_SEQ_ACK_VAL
+            end_ack_ack_num = (fin_ack_ack_num + 1) % _MAX_SEQ_ACK_VAL
+            final_ack_packet = build_ack_packet(self.src_host, self.src_port, self.dst_host, 
+                              self.dst_port, self.timeout, end_ack_seq_num, end_ack_ack_num, None)
+            self.sending_socket.sendall(final_ack_packet)
+            if self.debug:
+                print("close: final ack sent")
+
+            self.sending_socket.close()
+            self.receiving_socket.close()
+            self.is_connected = False
+            return
+        
+        self._handle_congestion(True)
+        raise Exception("Connection timeout!")
 
 
 if __name__ == "__main__":
@@ -412,3 +467,5 @@ if __name__ == "__main__":
     s.send("bye!\r\n\r\n".encode())
     resp = s.recv()
     print("Response:", resp)
+
+    s.close()
