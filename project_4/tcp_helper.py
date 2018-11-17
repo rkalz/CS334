@@ -40,8 +40,8 @@ def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, seq_num, 
         incomplete_segment += data
 
     checksum = compute_checksum(src_addr, dest_addr, incomplete_segment)
-    if data is not None:
-        # BUG: Checksum appears to be off by one if we send data. Not good.
+    if len(incomplete_segment) & 1:
+        # BUG: Checksum is off by one if the packet length is odd.
         checksum += 1
 
     segment = struct.pack(">HHIIBBHHH",

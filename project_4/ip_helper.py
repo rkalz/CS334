@@ -11,7 +11,7 @@ def verify_checksum(src_addr, dest_addr, ip_segment):
 
 def compute_checksum(src_addr, dest_addr, ip_segment):
     # Make segment even length
-    if len(ip_segment) & 1:
+    if len(ip_segment) % 2 == 1:
         ip_segment += b'\x00'
 
     # Build pseudoheader and thing to calc

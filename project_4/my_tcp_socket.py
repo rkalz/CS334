@@ -8,7 +8,7 @@ import socket
 
 from ip_helper import parse_ip_header, verify_checksum
 from tcp_helper import build_syn_packet, parse_tcp_header_response, build_ack_packet, \
-                        _SYN_FLAG, _ACK_FLAG, _RST_FLAG, build_psh_ack_packet
+                        _SYN_FLAG, _ACK_FLAG, _RST_FLAG, build_psh_ack_packet, _PSH_FLAG
 
 _MIN_HEADER_SIZE = 20
 _MAX_TCP_PACKET_SIZE = 65535
@@ -100,7 +100,9 @@ class MyTcpSocket:
                 break
 
             # Receive a full ethernet frame
-            response_packet = self.receiving_socket.recv(1522)
+            # (4096 is larger than an Ethernet frame but
+            # I don't know the exact number so better
+            response_packet = self.receiving_socket.recv(4096)
 
             # Strip MAC layer and extract IP header
             ip_and_later = response_packet[_IP_PACKET_START:]
@@ -174,8 +176,9 @@ class MyTcpSocket:
             # If there are options, remove them from the data
             offset = offset_and_ns >> 4
             total_header_size = 4 * offset
-            if total_header_size > _MIN_HEADER_SIZE:
-                data = tcp_header_and_data[total_header_size:]
+            data = tcp_header_and_data[total_header_size:]
+            if len(data) == 0:
+                data = None
 
             return seq_num, ack_num, flags, data
                
@@ -263,14 +266,6 @@ class MyTcpSocket:
         self.timeout = new_timeout
 
     def send(self, data_to_send):
-        # All packets have the ACK flag
-        # C - S=X A=Y D=50 -> S
-        # C <- S=Y A=X+50 D=100 - S
-        # S - S=X+50+1 A=X+100 -> S
-
-        # S = last acq received
-        # A = last seq sent + len(last data recv)
-        
         # send data
         data_seq_num = self.last_ack_recv
         data_ack_num = self.last_seq_recv + self.last_data_recv
@@ -325,14 +320,58 @@ class MyTcpSocket:
         # TODO: Handle ordering issues (hopefully not needed for this)
         # See notes in send
 
-        self._handle_congestion()
-        if self.debug:
-            print("recv: received data")
-        # send ACK
+        start_time = time()
+        while True:
+            diff = time() - start_time
+            if diff > self.timeout:
+                raise Exception("Connection timeout!")
 
-        if self.debug:
-            print("recv: sent ACK")
-        pass
+            data_ack_seq_num, data_ack_ack_num, data_ack_flags, resp_data = \
+                self._get_next_packet()
+            
+            psh_ack_flag = _PSH_FLAG | _ACK_FLAG
+            if data_ack_flags != psh_ack_flag:
+                # Not a PSH/ACK flag. Keep listening.
+                # TODO: Correct format is to keep receiving ACK flagged packets
+                # until we get a PSH/ACK. This code will only work for a single packet
+                if self.debug:
+                    print("recv: Packet received, but it wasn't a PSH ACK")
+                continue
+            if data_ack_seq_num != self.last_seq_recv and data_ack_ack_num != self.last_ack_recv:
+                # SEQ and ACK nums are bad. Keep listening.
+                if self.debug:
+                    print("recv: Received incorrect SEQ and/or ACK numbers")
+                continue
+            
+            self.last_seq_recv = data_ack_seq_num
+            self.last_ack_recv = data_ack_ack_num
+            self.last_data_recv = len(resp_data)
+
+            # We got something!
+            self._handle_congestion()
+            if self.debug:
+                print("recv: received data")
+            
+            # send ACK
+            ack_confirm_seq_num = self.last_ack_recv + self.last_data_recv
+            ack_confirm_ack_num = self.last_ack_sent
+            ack_confirm_recv, _, _ = build_ack_packet(self.src_host, self.src_port, 
+                        self.dst_host, self.dst_port, self.timeout, ack_confirm_seq_num, 
+                        ack_confirm_ack_num, None)
+            self.sending_socket.sendall(ack_confirm_recv)
+
+            self.last_seq_sent = ack_confirm_seq_num
+            self.last_ack_sent = ack_confirm_ack_num
+
+            if self.debug:
+                print("recv: sent ACK")
+            pass
+
+            return resp_data
+        
+        # Didn't get a response in time
+        self._handle_congestion(True)
+        raise Exception("Connection timeout!")
 
 
     def close(self):
@@ -355,10 +394,12 @@ class MyTcpSocket:
 if __name__ == "__main__":
     # BUG: If a MyTcpSocket object is named socket, gethostbyname will fail
     s = MyTcpSocket(True, False)
-    # s.connect("35.237.70.67", 80) # Apache web server hosted on GCP that
-                                      # not using for anything atm. Good for testing!
 
     # Install netcat and start an echo server with
     # ncat -l 2000 -k -c 'xargs -n1 echo'
     s.connect("127.0.0.1", 2000)
-    s.send("hello".encode(encoding='ascii'))
+
+    # NOTE: ncat will not send a response if there is no return symbol at the end
+    s.send("hello\r\n".encode())
+    resp = s.recv()
+    print("Response:!", resp)
