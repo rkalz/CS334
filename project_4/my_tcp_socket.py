@@ -353,8 +353,8 @@ class MyTcpSocket:
                 print("recv: received data")
             
             # send ACK
-            ack_confirm_seq_num = self.last_ack_recv + self.last_data_recv
-            ack_confirm_ack_num = self.last_ack_sent
+            ack_confirm_seq_num = self.last_ack_recv
+            ack_confirm_ack_num = self.last_ack_sent + self.last_data_sent
             ack_confirm_recv, _, _ = build_ack_packet(self.src_host, self.src_port, 
                         self.dst_host, self.dst_port, self.timeout, ack_confirm_seq_num, 
                         ack_confirm_ack_num, None)
@@ -402,4 +402,13 @@ if __name__ == "__main__":
     # NOTE: ncat will not send a response if there is no return symbol at the end
     s.send("hello\r\n".encode())
     resp = s.recv()
-    print("Response:!", resp)
+    print("Response:", resp)
+
+    # TODO: Fix SEQ and ACK math
+    s.send("there\n".encode())
+    resp = s.recv()
+    print("Response:", resp)
+
+    s.send("bye!\r\n\r\n".encode())
+    resp = s.recv()
+    print("Response:", resp)
