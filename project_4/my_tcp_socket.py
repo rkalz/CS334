@@ -55,9 +55,6 @@ class MyTcpSocket:
             # NOTE: Find a way to check if the port is taken, perhaps?
             # The odds of this occuring seem pretty slim, though
             self.src_port = randint(10000, 65535)
-        if self.debug:
-            print("constructor: Host is", str(IPv4Address(self.src_host))
-            , "at port", self.src_port)
 
         self.dst_host = None
         self.dst_port = None
@@ -65,8 +62,13 @@ class MyTcpSocket:
         self.is_connected = False
 
         self.cwnd = 0
+
+        # TODO: Better method of handling this information
         self.last_seq_sent = 0
+        self.last_seq_recv = 0
+        self.last_ack_sent = 0
         self.last_ack_recv = 0
+        self.last_data_sent = 0
         self.last_data_recv = 0
 
     @staticmethod
@@ -131,7 +133,7 @@ class MyTcpSocket:
             checksum_clear = verify_checksum(packet_src, packet_dst, ip_header)
             if not checksum_clear:
                 # Packet did not pass checksum. 
-                if self.debug:
+                if self.debug_verbose:
                     print("_get_next_packet: IP checksum failed!")
                 if not self.debug and not self.debug_verbose:
                     # Turns out lots of utilities don't send correct checksums
@@ -179,14 +181,14 @@ class MyTcpSocket:
                
         raise Exception("Connection timeout!")
 
-    def connect(self, host_and_port_tuple):
-        host = host_and_port_tuple[0]
-        port = host_and_port_tuple[1]
-
+    def connect(self, host, port):
         host_hostname = socket.gethostbyname(host)
         if host_hostname[:4] == "127.":
             # We're using loopback. Set source to localhost.
             self.src_host = int(IPv4Address("127.0.0.1"))
+        if self.debug:
+            print("constructor: Host is", str(IPv4Address(self.src_host))
+            , "at port", self.src_port)
 
         self.dst_host = int(IPv4Address(socket.gethostbyname(host)))
         self.dst_port = port
@@ -204,6 +206,9 @@ class MyTcpSocket:
             syn_packet = build_syn_packet(self.src_host, self.src_port,
                             self.dst_host, self.dst_port, self.timeout)
             self.sending_socket.sendall(syn_packet)
+            self.last_seq_sent = 0
+            self.last_ack_sent = 0
+
             if self.debug:
                 print("connect: sent SYN")
 
@@ -224,6 +229,8 @@ class MyTcpSocket:
                     print("connect: received incorrect ACK! expected",
                     str(1), "got", str(syn_ack_ack_num))
                 continue
+            self.last_seq_recv = syn_ack_seq_num
+            self.last_ack_recv = syn_ack_ack_num
             
             if self.debug:
                 print("connect: received SYN/ACK")
@@ -238,9 +245,9 @@ class MyTcpSocket:
             if self.debug:
                 print("connect: sent ACK packet")
 
-            self.last_seq_sent = ack_ack_num
-            self.last_ack_recv = ack_seq_num
-            self.last_data_recv = 0
+            self.last_seq_sent = ack_seq_num
+            self.last_ack_sent = ack_ack_num
+            self.last_data_recv = 1
 
             # We did everything successfully! End the loop
             self.is_connected = True
@@ -266,7 +273,7 @@ class MyTcpSocket:
         
         # send data
         data_seq_num = self.last_ack_recv
-        data_ack_num = self.last_seq_sent + self.last_data_recv
+        data_ack_num = self.last_seq_recv + self.last_data_recv
 
         start_time = time()
         while True:
@@ -280,6 +287,11 @@ class MyTcpSocket:
                         self.dst_host, self.dst_port, self.timeout, data_seq_num, 
                         data_ack_num, data_to_send)
             self.sending_socket.sendall(data_packet)
+
+            self.last_seq_sent = data_seq_num
+            self.last_ack_sent = data_ack_num
+            self.last_data_sent = len(data_to_send)
+
             if self.debug:
                 print("send: sent data")
 
@@ -296,6 +308,7 @@ class MyTcpSocket:
                     print("send: Received incorrect SEQ and ACK nums")
                 continue
             
+            self.last_seq_recv = ack_seq_num
             self.last_ack_recv = ack_ack_num
 
             self._handle_congestion()
@@ -342,10 +355,10 @@ class MyTcpSocket:
 if __name__ == "__main__":
     # BUG: If a MyTcpSocket object is named socket, gethostbyname will fail
     s = MyTcpSocket(True, False)
-    # s.connect(("35.237.70.67", 80)) # Apache web server hosted on GCP that
+    # s.connect("35.237.70.67", 80) # Apache web server hosted on GCP that
                                       # not using for anything atm. Good for testing!
 
     # Install netcat and start an echo server with
     # ncat -l 2000 -k -c 'xargs -n1 echo'
-    s.connect(("127.0.0.1", 2000))
+    s.connect("127.0.0.1", 2000)
     s.send("hello".encode(encoding='ascii'))
