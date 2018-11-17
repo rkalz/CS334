@@ -21,8 +21,8 @@ _IPV4_LOOPBACK_VAL = 2130706433
 class MyTcpSocket:
     # TODO: Add additional input parameters to allow creating new client sockets from accept?
     # src and dest parameters will be used by a listener to generate new sockets
-    def __init__(self, debug=False, debug_verbose=False, src_host=None, src_port=None, dst_host=None
-    , dst_port=None):
+    def __init__(self, debug=False, debug_verbose=False, bypass_checksum=False, src_host=None, 
+                 src_port=None, dst_host=None, dst_port=None):
         # Make sure we're superuser on linux
         if platform != 'linux':
             raise Exception("This code will only work on Linux!")
@@ -46,6 +46,7 @@ class MyTcpSocket:
 
         self.debug = debug
         self.debug_verbose = debug_verbose
+        self.bypass_checksum = bypass_checksum
 
         self.src_host = src_host
         if self.src_host is None:
@@ -130,12 +131,12 @@ class MyTcpSocket:
                     ,packet_type_str)
                 continue
 
-            checksum_clear = verify_checksum(packet_src, packet_dst, ip_header)
-            if not checksum_clear:
+            ip_checksum_clear = verify_checksum(packet_src, packet_dst, ip_header)
+            if not ip_checksum_clear:
                 # Packet did not pass checksum. 
                 if self.debug_verbose:
                     print("_get_next_packet: IP checksum failed!")
-                if not self.debug and not self.debug_verbose:
+                if not self.bypass_checksum:
                     # Turns out lots of utilities don't send correct checksums
                     continue
             
@@ -152,17 +153,23 @@ class MyTcpSocket:
                     print("_get_next_packet: Not our packet:", src_port, "->", dest_port)
                 continue
             
-            checksum_clear = verify_checksum(packet_src, packet_dst, tcp_header_and_data)
-            if not checksum_clear:
+            tcp_checksum_clear = verify_checksum(packet_src, packet_dst, tcp_header_and_data)
+            if not tcp_checksum_clear:
                 # See notes on IP checksum
-                if self.debug:
+                if self.debug_verbose:
                     print("_get_next_packet: TCP checksum failed!")
-                if not self.debug and not self.debug_verbose:
+                if not self.bypass_checksum:
                     # Turns out lots of utilities don't send correct checksums
                     continue
                 
             if self.debug:
                 print("_get_next_packet: TCP response received")
+            
+            if self.bypass_checksum and self.debug:
+                if not ip_checksum_clear:
+                    print("_get_next_packet: IP checksum failed!")
+                if not tcp_checksum_clear:
+                    print("_get_next_packet: TCP checksum failed!")
 
             if flags & _RST_FLAG:
                 # We got a reset signal, the remote port has closed
@@ -385,6 +392,7 @@ class MyTcpSocket:
                 raise Exception("Connection timeout!")
 
             # send FIN/ACK (S=X, A=Y)
+            # X and Y are the SEQ and ACK from the last sent ACK
             fin_ack_to_send = build_fin_ack_packet(self.src_host, self.src_port, self.dst_host, 
                               self.dst_port, self.timeout, fin_ack_seq_num, fin_ack_ack_num)
             self.sending_socket.sendall(fin_ack_to_send)
@@ -432,7 +440,7 @@ class MyTcpSocket:
 
 if __name__ == "__main__":
     # BUG: If a MyTcpSocket object is named socket, gethostbyname will fail
-    s = MyTcpSocket(True, False)
+    s = MyTcpSocket(bypass_checksum=True)
 
     # Install netcat and start an echo server with
     # ncat -l 2000 -k -c 'xargs -n1 echo'
