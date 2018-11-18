@@ -106,12 +106,9 @@ class MyTcpSocket:
 
             # Strip MAC layer and extract IP header
             ip_and_later = response_packet[_IP_PACKET_START:]
-            if self.src_host != _IPV4_LOOPBACK_VAL:
-                # Remove ethernet padding if not a loopback packet
-                ip_and_later = ip_and_later[:-2]
             ip_header = ip_and_later[:_MIN_HEADER_SIZE]
 
-            packet_src, packet_dst, packet_type = parse_ip_header(ip_header)
+            packet_src, packet_dst, packet_type, total_length = parse_ip_header(ip_header)
             if packet_type != socket.IPPROTO_TCP or packet_src != self.dst_host \
                 or packet_dst != self.src_host:
                 # Either it's not TCP, sent by a different source, and/or meant for a 
@@ -139,6 +136,9 @@ class MyTcpSocket:
                 if not self.bypass_checksum:
                     # Turns out lots of utilities don't send correct checksums
                     continue
+
+            # Strip any padding that might have occured
+            ip_and_later = ip_and_later[:total_length]
             
             # Make sure this is a TCP packet meant for us
             tcp_header_and_data = ip_and_later[_TCP_PACKET_START:]
@@ -337,7 +337,7 @@ class MyTcpSocket:
                 self._get_next_packet()
             
             psh_ack_flag = _PSH_FLAG | _ACK_FLAG
-            if data_ack_flags != psh_ack_flag:
+            if not (data_ack_flags & psh_ack_flag):
                 # Not a PSH/ACK flag. Keep listening.
                 # TODO: Correct format is to keep receiving ACK flagged packets
                 # until we get a PSH/ACK. This code will only work for a single packet

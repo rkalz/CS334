@@ -81,7 +81,7 @@ def parse_ip_header(data):
 
     # ver_and_ihl = valid_ip_header[0]
     # dscp_and_ecn = valid_ip_header[1]
-    # total_length = valid_ip_header[2]
+    total_length = valid_ip_header[2]
     # identification = valid_ip_header[3]
     # flags_and_frag_offset = valid_ip_header[4]
     # ttl = valid_ip_header[5]
@@ -90,5 +90,5 @@ def parse_ip_header(data):
     src_addr = valid_ip_header[8]
     dest_addr = valid_ip_header[9]
 
-    return src_addr, dest_addr, protocol
+    return src_addr, dest_addr, protocol, total_length
 
