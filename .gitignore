@@ -7,5 +7,6 @@ project_2/__pycache__/http_handler.cpython-37.pyc
 http_handler_profile
 project_3/__pycache__/http_handler.cpython-37.pyc
 project_3/__pycache__/
-project_4/
+project_4/__pycache__/
+project_4/*.pyc
 .vscode/
