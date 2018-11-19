@@ -19,9 +19,8 @@ _MAX_SEQ_ACK_VAL = 0xFFFFFFFF
 _IPV4_LOOPBACK_VAL = 2130706433
 
 class MyTcpSocket:
-    # TODO: Add additional input parameters to allow creating new client sockets from accept?
     # src and dest parameters will be used by a listener to generate new sockets
-    def __init__(self, debug=False, debug_verbose=False, bypass_checksum=False, src_host=None, 
+    def __init__(self, debug=False, debug_verbose=False, bypass_checksum=False, src_host=None,
                  src_port=None, dst_host=None, dst_port=None):
         # Make sure we're superuser on linux
         if platform != 'linux':
@@ -65,7 +64,6 @@ class MyTcpSocket:
 
         self.cwnd = 0
 
-        # TODO: Better method of handling this information
         self.last_seq_recv = 0
         self.last_ack_recv = 0
         self.last_data_recv = 0
@@ -281,7 +279,7 @@ class MyTcpSocket:
         while True:
             diff = time() - start_time
             if diff > self.timeout:
-                raise Exception("Connection timeout")
+                break
 
             # TODO: Handle data that's too large to send in one packet
             # NOTE: Split packets and send all but last with ACK only, send last with PSH/ACK
@@ -331,7 +329,7 @@ class MyTcpSocket:
         while True:
             diff = time() - start_time
             if diff > self.timeout:
-                raise Exception("Connection timeout!")
+                break
 
             data_ack_seq_num, data_ack_ack_num, data_ack_flags, resp_data = \
                 self._get_next_packet()
