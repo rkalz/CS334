@@ -7,7 +7,7 @@ import argparse
 from my_tcp_socket import MyTcpSocket
 
 
-def get_my_bytes(host, port, blazerid, is_ssl):
+def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
     sock = MyTcpSocket(bypass_checksum=True)
     if is_ssl:
         print("SSL has been disabled")
@@ -26,10 +26,16 @@ def get_my_bytes(host, port, blazerid, is_ssl):
         # HELLO message construction in here just in case blazerid isn't a string
         hello = header + " HELLO " + blazerid + '\n'
         hello = hello.encode(encoding='ascii')
+        if debug:
+            print(hello)
+
         sock.send(hello)
 
         # Convert the response into a list of strings
         response = sock.recv()
+        if debug:
+            print(response)
+
         response = response.decode(encoding='ascii')
         response = response[:-1]                        # Strip \n from end of response
         response = response.split(' ')
@@ -71,12 +77,17 @@ def get_my_bytes(host, port, blazerid, is_ssl):
         challenge_number = str(floor(challenge_number))
         solution = header + ' ' + challenge_number + '\n'
         solution = solution.encode(encoding='ascii')
+        if debug:
+            print(solution)
 
         try:
             # Send solution message and format the response
             sock.send(solution)
 
             response = sock.recv()
+            if debug:
+                print(response)
+
             response = response.decode(encoding='ascii')
             response = response[:-1]
             response = response.split(' ')
@@ -99,6 +110,7 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--ssl", help="specify if using ssl", action='store_true')
     parser.add_argument("hostname", type=str, help="specify hostname or IP of server")
     parser.add_argument("blazerid", type=str, help="specify blazerid")
+    parser.add_argument("-d", "--debug", help="enable debug printing", action="store_true")
 
     args = parser.parse_args()
 
@@ -118,4 +130,4 @@ if __name__ == "__main__":
     else:
         host = args.hostname
 
-    get_my_bytes(host, port, args.blazerid, args.ssl)
+    get_my_bytes(host, port, args.blazerid, args.ssl, args.debug)
