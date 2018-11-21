@@ -1,6 +1,7 @@
 import struct
 
-from ip_helper import build_ip_header, compute_checksum
+from ip_helper import build_ip_header
+from socket import IPPROTO_TCP
 
 _FIN_FLAG = 1
 _SYN_FLAG = 2
@@ -12,6 +13,38 @@ _ECE_FLAG = 64
 _CWR_FLAG = 128
 _NS_FLAG = 256
 
+def verify_tcp_checksum(src_addr, dest_addr, tcp_packet, debug=False):
+    checksum = compute_tcp_checksum(src_addr, dest_addr, tcp_packet)
+    if debug:
+        print("verify_tcp_checksum: computed", checksum)
+    return checksum == 0
+
+def compute_tcp_checksum(src_addr, dest_addr, tcp_packet):
+    # Make segment even length
+    if len(tcp_packet) % 2 == 1:
+        tcp_packet += b'\x00'
+
+    # Build pseudoheader and thing to calc
+    # (Pseudoheader only exists in TCP checksumming)
+    pseudo_header = struct.pack(">IIBBH", src_addr, dest_addr, 0, IPPROTO_TCP, len(tcp_packet))
+    thing_to_calc = pseudo_header + tcp_packet
+    sum = 0
+
+    # Sum of all two byte pairs in thing_to_calc
+    for i in range(1, len(thing_to_calc), 2):
+        num = (int(thing_to_calc[i-1]) << 8) + int(thing_to_calc[i])
+        sum += num
+
+    # Add third byte to bottom two bytes
+    carry = sum >> 16
+    sum &= 0xFFFF
+    sum += carry
+
+    # Perform twos complement and extract bottom two bytes
+    sum = ~sum
+    sum &= 0xFFFF
+
+    return sum
 
 def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, seq_num, ack_num, data):
     if seq_num is None:
@@ -21,7 +54,7 @@ def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, seq_num, 
         # If no ack, set to zero
         ack_num = 0
     data_offset = 5                      # header_length / 4, we don't need options to send
-    window_size = (1 << 16) - 1          # TODO: fix this?
+    window_size = (1 << 16) - 1          
     checksum = 0
     urg_ptr = 0
 
@@ -39,7 +72,7 @@ def _build_tcp_header(flags, src_addr, src_port, dest_addr, dest_port, seq_num, 
         # TCP checksum *does* include data
         incomplete_segment += data
 
-    checksum = compute_checksum(src_addr, dest_addr, incomplete_segment)
+    checksum = compute_tcp_checksum(src_addr, dest_addr, incomplete_segment)
     if len(incomplete_segment) & 1:
         # BUG: Checksum is off by one if the packet length is odd.
         checksum += 1

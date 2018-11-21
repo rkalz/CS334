@@ -9,7 +9,7 @@ from my_tcp_socket import MyTcpSocket
 
 def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
     # TODO: Fix the checksum so we can disable this flag@
-    sock = MyTcpSocket(bypass_checksum=True)
+    sock = MyTcpSocket(debug=debug)
     if is_ssl:
         print("SSL has been disabled")
         # sock = ssl.wrap_socket(sock)                  

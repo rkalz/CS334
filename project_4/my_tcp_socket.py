@@ -6,10 +6,10 @@ from time import sleep, time
 
 import socket
 
-from ip_helper import parse_ip_header, verify_checksum
+from ip_helper import parse_ip_header, verify_ip_checksum
 from tcp_helper import build_syn_packet, parse_tcp_header_response, build_ack_packet, \
                         _SYN_FLAG, _ACK_FLAG, _RST_FLAG, build_psh_ack_packet, _PSH_FLAG, \
-                        build_fin_ack_packet, _FIN_FLAG
+                        build_fin_ack_packet, _FIN_FLAG, verify_tcp_checksum
 
 _MIN_HEADER_SIZE = 20
 _MAX_TCP_PACKET_SIZE = 65535
@@ -126,7 +126,7 @@ class MyTcpSocket:
                     ,packet_type_str)
                 continue
 
-            ip_checksum_clear = verify_checksum(packet_src, packet_dst, ip_header)
+            ip_checksum_clear = verify_ip_checksum(packet_src, packet_dst, ip_header, self.debug)
             if not ip_checksum_clear:
                 # Packet did not pass checksum. 
                 if self.debug_verbose:
@@ -151,7 +151,8 @@ class MyTcpSocket:
                     print("_get_next_packet: Not our packet:", src_port, "->", dest_port)
                 continue
             
-            tcp_checksum_clear = verify_checksum(packet_src, packet_dst, tcp_header_and_data)
+            tcp_checksum_clear = verify_tcp_checksum(packet_src, packet_dst, tcp_header_and_data, 
+                                 self.debug)
             if not tcp_checksum_clear:
                 # See notes on IP checksum
                 if self.debug_verbose:
@@ -438,7 +439,7 @@ class MyTcpSocket:
 
 if __name__ == "__main__":
     # BUG: If a MyTcpSocket object is named socket, gethostbyname will fail
-    s = MyTcpSocket(bypass_checksum=True)
+    s = MyTcpSocket(debug=True)
 
     # Install netcat and start an echo server with
     # ncat -l 2000 -k -c 'xargs -n1 echo'

@@ -4,24 +4,22 @@ from socket import IPPROTO_TCP
 _DONT_FRAGMENT = 2
 _ADDITIONAL_FRAGMENTS = 1
 
-def verify_checksum(src_addr, dest_addr, ip_segment):
+def verify_ip_checksum(src_addr, dest_addr, ip_segment, debug=False):
     # BUG: This doesn't work
-    computed_checksum = compute_checksum(src_addr, dest_addr, ip_segment)
+    computed_checksum = compute_ip_checksum(src_addr, dest_addr, ip_segment)
+    if debug:
+        print("verify_ip_checksum: computed", computed_checksum)
     return computed_checksum == 0
 
-def compute_checksum(src_addr, dest_addr, ip_segment):
+def compute_ip_checksum(src_addr, dest_addr, ip_segment):
     # Make segment even length
     if len(ip_segment) % 2 == 1:
         ip_segment += b'\x00'
 
-    # Build pseudoheader and thing to calc
-    pseudo_header = struct.pack(">IIBBH", src_addr, dest_addr, 0, IPPROTO_TCP, len(ip_segment))
-    thing_to_calc = pseudo_header + ip_segment
     sum = 0
-
-    # Sum of all two byte pairs in thing_to_calc
-    for i in range(1, len(thing_to_calc), 2):
-        num = (int(thing_to_calc[i-1]) << 8) + int(thing_to_calc[i])
+    # Sum of all two byte pairs in ip_segment
+    for i in range(1, len(ip_segment), 2):
+        num = (int(ip_segment[i-1]) << 8) + int(ip_segment[i])
         sum += num
 
     # Add third byte to bottom two bytes
@@ -63,7 +61,7 @@ def build_ip_header(src_addr, dest_addr, ttl, data):
                                     dest_addr)
 
     # IP Checksum input doesn't include data
-    checksum = compute_checksum(src_addr, dest_addr, incomplete_header)
+    checksum = compute_ip_checksum(src_addr, dest_addr, incomplete_header)
 
     fragment = struct.pack(">BBHHHBBHII",
                             ver_and_ihl, dscp_and_ecn, total_length,
