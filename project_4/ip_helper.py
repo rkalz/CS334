@@ -5,9 +5,11 @@ _DONT_FRAGMENT = 2
 _ADDITIONAL_FRAGMENTS = 1
 
 def verify_ip_checksum(src_addr, dest_addr, ip_segment, debug=False):
-    # BUG: This doesn't work
     computed_checksum = compute_ip_checksum(src_addr, dest_addr, ip_segment)
-    if debug:
+    if len(ip_segment) % 2 != 0:
+        computed_checksum += 1
+    computed_checksum = computed_checksum % 65536
+    if debug and computed_checksum != 0:
         print("verify_ip_checksum: computed", computed_checksum)
     return computed_checksum == 0
 

@@ -15,7 +15,10 @@ _NS_FLAG = 256
 
 def verify_tcp_checksum(src_addr, dest_addr, tcp_packet, debug=False):
     checksum = compute_tcp_checksum(src_addr, dest_addr, tcp_packet)
-    if debug:
+    if len(tcp_packet) % 2 != 0:
+        checksum += 1
+    checksum = checksum % 65536
+    if debug and checksum != 0:
         print("verify_tcp_checksum: computed", checksum)
     return checksum == 0
 
