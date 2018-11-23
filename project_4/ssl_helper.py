@@ -1,7 +1,31 @@
 from os import urandom
+import base64
 import struct
+import subprocess
 
 # Byte layouts taken from https://tls12.ulfheim.net
+
+def generate_x25519_keys():
+    # Incredibly cursed crypto keygen
+    private_key_pem = subprocess.run(["openssl", "genpkey", "-algorithm", "x25519"], stdout=subprocess.PIPE)
+    public_key_pem = subprocess.run(["openssl", "pkey", "-pubout"], stdout=subprocess.PIPE, input=private_key_pem.stdout)
+
+    private_key_pem = private_key_pem.stdout.decode()
+    public_key_pem = public_key_pem.stdout.decode()
+    if "PRIVATE KEY" not in private_key_pem or "PUBLIC KEY" not in public_key_pem:
+        raise Exception("OpenSSL 1.1 is not on this computer!")
+
+    public_key_pem = public_key_pem.replace("-----BEGIN PUBLIC KEY-----\n", '') \
+        .replace("\n-----END PUBLIC KEY-----\n", "").encode()
+    public_key_pem = base64.decodebytes(public_key_pem)
+
+    public_key = public_key_pem[-32:]
+
+    # OpenSSL command line wants PEM formatted keys. We'll have to build
+    # a PEM for an incoming public key (Append "\x30\x2A\x30\x05\x06\x03\x2B\x65\x6E\x03\x21\x00",
+    # encode to base64, and add begin and end stuff)
+    return public_key, private_key_pem.encode()
+
 
 def build_client_hello():
     client_version = 0x0303
@@ -40,4 +64,8 @@ def build_client_hello():
     full_hello += header_and_later
 
     return full_hello
-    
+
+if __name__ == "__main__":
+    public_key_bytes, private_key_pem = generate_x25519_keys()
+    print("Public Key:", public_key_bytes)
+    print("Private Key:", private_key_pem)
