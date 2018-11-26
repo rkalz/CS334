@@ -17,7 +17,7 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
     try:
         sock.connect(host, port)
     except Exception as e:
-        print(e)
+        print("client: failed to connect", e)
         return
 
     header = "cs334fall2018"
@@ -28,23 +28,23 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
         hello = header + " HELLO " + blazerid + '\n'
         hello = hello.encode(encoding='ascii')
         if debug:
-            print(hello)
+            print("client: hello sent:", hello)
 
         sock.send(hello)
 
         # Convert the response into a list of strings
         response = sock.recv()
         if debug:
-            print(response)
+            print("client: response received:", response)
 
         response = response.decode(encoding='ascii')
         response = response[:-1]                        # Strip \n from end of response
         response = response.split(' ')
     except Exception as e:
         # If we get an except Exception as eion, close the socket and return
-        print(e)
+        print("client: response recv failed:", e)
         sock.close()
-        return
+        get_my_bytes(host, port, blazerid, is_ssl, debug)
 
     while len(response) == 5 and response[0] == header and response[1] == "STATUS":
         # Make sure we have a correctly formatted STATUS message before handling
@@ -56,9 +56,9 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
             operator = response[3]
             second_number = int(response[4])
         except Exception as e:
-            print(e)
+            print("client: response parsing failed:", e)
             sock.close()
-            return
+            get_my_bytes(host, port, blazerid, is_ssl, debug)
 
         # Compute the response
         challenge_number = None
@@ -71,15 +71,17 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
         elif operator == '/' and second_number != 0:
             challenge_number = first_number / second_number
         else:
+            if debug:
+                print("client: response computation failed")
             sock.close()
-            return
+            get_my_bytes(host, port, blazerid, is_ssl, debug)
 
         # Build solution message
         challenge_number = str(floor(challenge_number))
         solution = header + ' ' + challenge_number + '\n'
         solution = solution.encode(encoding='ascii')
         if debug:
-            print(solution)
+            print("client: solution sent:", solution)
 
         try:
             # Send solution message and format the response
@@ -93,14 +95,19 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
             response = response[:-1]
             response = response.split(' ')
         except Exception as e:
-            print(e)
+            print("client: solution send failed:", e)
             sock.close()
-            return
+            get_my_bytes(host, port, blazerid, is_ssl, debug)
 
     if len(response) == 3 and response[0] == header and response[2] == "BYE":
         # If we're out of challenge loop, make sure we have a correctly formatted BYE message
         flag = response[1]
         print(flag)
+    else:
+        if debug:
+            print("client: bad final message", response)
+        sock.close()
+        get_my_bytes(host, port, blazerid, is_ssl, debug)
 
     sock.close()
 

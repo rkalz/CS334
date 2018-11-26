@@ -21,7 +21,8 @@ _IPV4_LOOPBACK_VAL = 2130706433
 class MyTcpSocket:
     # src and dest parameters will be used by a listener to generate new sockets
     def __init__(self, debug=False, debug_verbose=False, bypass_checksum=False, src_host=None,
-                 src_port=None, dst_host=None, dst_port=None):
+                 src_port=None, dst_host=None, dst_port=None, last_seq_recv=0, last_ack_recv=0,
+                 last_data_recv=0):
         # Make sure we're superuser on linux
         if platform != 'linux':
             raise Exception("This code will only work on Linux!")
@@ -64,9 +65,13 @@ class MyTcpSocket:
 
         self.cwnd = 0
 
-        self.last_seq_recv = 0
-        self.last_ack_recv = 0
-        self.last_data_recv = 0
+        self.last_seq_recv = last_seq_recv
+        self.last_ack_recv = last_ack_recv
+        self.last_data_recv = last_data_recv
+
+        if self.last_seq_recv != 0 and self.last_ack_recv != 0:
+            # This is a socket created after a remote connection
+            self.is_connected = True
 
 
     @staticmethod
@@ -195,7 +200,7 @@ class MyTcpSocket:
         host_hostname = socket.gethostbyname(host)
         if host_hostname[:4] == "127.":
             # We're using loopback. Set source to localhost.
-            self.src_host = int(IPv4Address("127.0.0.1"))
+            self.src_host = _IPV4_LOOPBACK_VAL
         if self.debug:
             print("constructor: Host is", str(IPv4Address(self.src_host))
             , "at port", self.src_port)
