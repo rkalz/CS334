@@ -9,7 +9,8 @@ import socket
 from ip_helper import parse_ip_header, verify_ip_checksum
 from tcp_helper import build_syn_packet, parse_tcp_header_response, build_ack_packet, \
                         _SYN_FLAG, _ACK_FLAG, _RST_FLAG, build_psh_ack_packet, _PSH_FLAG, \
-                        build_fin_ack_packet, _FIN_FLAG, verify_tcp_checksum
+                        build_fin_ack_packet, _FIN_FLAG, verify_tcp_checksum, \
+                        build_syn_ack_packet
 
 _MIN_HEADER_SIZE = 20
 _MAX_TCP_PACKET_SIZE = 65535
@@ -72,7 +73,8 @@ class MyTcpSocket:
         if self.last_seq_recv != 0 and self.last_ack_recv != 0:
             # This is a socket created after a remote connection
             self.is_connected = True
-
+        
+        self.is_server = False
 
     @staticmethod
     def _resolve_local_ip():
@@ -92,15 +94,20 @@ class MyTcpSocket:
 
         self.cwnd += 1
 
-    def _get_next_packet(self):
+    def _get_next_packet(self, listen=False):
+        # If we're listening, we only need
+        # to match the destination TCP packet
+
         # Receiving packet gives us MAC and up
         # We will check both IP and TCP
         # and return relevant TCP information
         start_time = time()
         while True:
-            diff = time() - start_time
-            if diff > self.timeout:
-                break
+            if not listen:
+                # Listeners shouldn't time out
+                diff = time() - start_time
+                if diff > self.timeout:
+                    break
 
             # Receive a full ethernet frame
             # (4096 is larger than an Ethernet frame but
@@ -112,8 +119,8 @@ class MyTcpSocket:
             ip_header = ip_and_later[:_MIN_HEADER_SIZE]
 
             packet_src, packet_dst, packet_type, total_length = parse_ip_header(ip_header)
-            if packet_type != socket.IPPROTO_TCP or packet_src != self.dst_host \
-                or packet_dst != self.src_host:
+            if (not listen and packet_type != socket.IPPROTO_TCP or packet_src != self.dst_host \
+                or packet_dst != self.src_host) or (listen and packet_type != socket.IPPROTO_TCP):
                 # Either it's not TCP, sent by a different source, and/or meant for a 
                 # different IP
                 if self.debug_verbose:
@@ -149,7 +156,8 @@ class MyTcpSocket:
             src_port, dest_port, seq_num, ack_num, offset_and_ns, \
             flags, _, _ = parse_tcp_header_response(tcp_header)
                 
-            if src_port != self.dst_port and dest_port != self.src_port:
+            if (not listen and src_port != self.dst_port and dest_port != self.src_port) or \
+                (listen and dest_port != self.src_port):
                 # This isn't our TCP packet. Restart.
                 # Multiple sockets connected to the same IP, perhaps?
                 if self.debug_verbose:
@@ -188,7 +196,9 @@ class MyTcpSocket:
             data = tcp_header_and_data[total_header_size:]
             if len(data) == 0:
                 data = None
-
+            
+            if listen:
+                return packet_src, packet_dst, src_port, seq_num, flags
             return seq_num, ack_num, flags, data
                
         raise Exception("Connection timeout!")
@@ -196,6 +206,8 @@ class MyTcpSocket:
     def connect(self, host, port):
         if self.is_connected:
             raise Exception("Already connected!")
+        if self.is_server:
+            raise Exception("This is a server socket!")
 
         host_hostname = socket.gethostbyname(host)
         if host_hostname[:4] == "127.":
@@ -217,7 +229,7 @@ class MyTcpSocket:
             if diff > self.timeout:
                 break
 
-            # Send SYN (SEQ = 0, ACK = 0)
+            # Send SYN (SEQ = 0)
             syn_packet = build_syn_packet(self.src_host, self.src_port,
                             self.dst_host, self.dst_port, self.timeout)
             self.sending_socket.sendall(syn_packet)
@@ -269,7 +281,6 @@ class MyTcpSocket:
         self._handle_congestion(True)
         raise Exception("Failed to receive packet in time!")
         
-
     def settimeout(self, new_timeout):
         self.timeout = new_timeout
 
@@ -345,6 +356,7 @@ class MyTcpSocket:
                 # Not a PSH/ACK flag. Keep listening.
                 # TODO: Correct format is to keep receiving ACK flagged packets
                 # until we get a PSH/ACK. This code will only work for a single packet
+                # TODO: Should also handle FIN flagged packets
                 if self.debug:
                     print("recv: Packet received, but it wasn't a PSH ACK")
                 continue
@@ -380,7 +392,6 @@ class MyTcpSocket:
         # Never got a FIN/ACK
         self._handle_congestion(True)
         raise Exception("Connection timeout!")
-
 
     def close(self):
         if not self.is_connected:
@@ -440,30 +451,95 @@ class MyTcpSocket:
         
         self._handle_congestion(True)
         raise Exception("Connection timeout!")
+    
+    def bind(self, port_number):
+        if self.is_server or self.is_connected:
+            raise Exception("Cannot call bind on a configured socket!")
+        self.src_port = port_number
+        self.is_server = True
+    
+    def accept(self):
+        # Since we're not messing with the kernel, this doesn't need to do anything
+        pass
+    
+    def listen(self):
+        # Get the next packet whose destination port matches our listening port
+        if not self.is_server:
+            raise Exception("Only servers can listen!")
+        while True:
+            remote_ip, requested_ip, remote_port, syn_seq_num, flags = self._get_next_packet(listen=True)
+            if flags == _SYN_FLAG:
+                # Receive SYN (S = X)
+                if self.debug:
+                    print("listen: syn received!")
+                break
+        
+        # Update local values for _get_next_packet
 
+        self.src_host = requested_ip
+        self.dst_host = remote_ip
+        self.dst_port = remote_port
+
+        # Build SYN/ACK (S = 0, A = X+1)
+        syn_ack_seq_num = 0
+        syn_ack_ack_num = (syn_seq_num + 1) % _MAX_SEQ_ACK_VAL
+        syn_ack_response = build_syn_ack_packet(self.src_host, self.src_port, self.dst_host, self.dst_port, self.timeout, 
+                           syn_ack_seq_num, syn_ack_ack_num)
+        self.sending_socket.sendall(syn_ack_response)
+
+        # Receive ACK
+        start_time = time()
+        while True:
+            diff = time() - start_time
+            if diff > self.timeout:
+                # Didn't get the ACK on time. Restart listening
+                if self.debug:
+                    print("connect: didn't receive ACK on time!")
+                self._handle_congestion(True)
+                return self.listen()
+
+            ack_seq_num, ack_ack_num, flags, _ = self._get_next_packet()
+            if flags == _ACK_FLAG and ack_seq_num == syn_ack_ack_num and \
+                ack_ack_num == (syn_ack_seq_num + 1) % _MAX_SEQ_ACK_VAL:
+                # We got our ACK!
+                self._handle_congestion()
+                break
+            else:
+                if self.debug:
+                    print("listen: packet received but not an ACK for us")
+        
+        # Create and return new socket object
+        new_sock = MyTcpSocket(self.debug, self.debug_verbose, self.bypass_checksum, self.src_host,
+                               self.src_port, self.dst_host, self.dst_port, ack_seq_num, ack_ack_num, 0)
+
+        return new_sock
 
 if __name__ == "__main__":
-    # BUG: If a MyTcpSocket object is named socket, gethostbyname will fail
-    s = MyTcpSocket(debug=True)
+    test_server = True
+    if not test_server:
+        # BUG: If a MyTcpSocket object is named socket, gethostbyname will fail
+        s = MyTcpSocket(debug=True)
 
-    # Install netcat and start an echo server with
-    # ncat -l 2000 -k -c 'xargs -n1 echo'
-    s.connect("127.0.0.1", 2000)
+        # Install netcat and start an echo server with
+        # ncat -l 2000 -k -c 'xargs -n1 echo'
+        s.connect("127.0.0.1", 2000)
 
-    # NOTE: ncat will not send a response if there is no return symbol at the end
-    s.send("hello\r\n".encode())
-    resp = s.recv()
-    print("Response:", resp)
+        # NOTE: ncat will not send a response if there is no return symbol at the end
+        s.send("hello\r\n".encode())
+        resp = s.recv()
+        print("Response:", resp)
 
-    # NOTE: Sometimes ncat will send back a PSH/ACK after a data ACK instead of 
-    # a non data ACK and then a PSH/ACK. This will appear as spurious retransmission
-    # in Wireshark (and a debug messaage here that we got a non-ACK response)
-    s.send("there\n".encode())
-    resp = s.recv()
-    print("Response:", resp)
+        # NOTE: Sometimes ncat will send back a PSH/ACK after a data ACK instead of 
+        # a non data ACK and then a PSH/ACK. This will appear as spurious retransmission
+        # in Wireshark (and a debug messaage here that we got a non-ACK response)
+        s.send("there\n".encode())
+        resp = s.recv()
+        print("Response:", resp)
 
-    s.send("bye!\r\n\r\n".encode())
-    resp = s.recv()
-    print("Response:", resp)
+        s.send("bye!\r\n\r\n".encode())
+        resp = s.recv()
+        print("Response:", resp)
 
-    s.close()
+        s.close()
+    else:
+        pass

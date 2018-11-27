@@ -115,6 +115,12 @@ def build_fin_ack_packet(src_addr, src_port, dest_addr, dest_port, ttl, seq_num,
         _build_tcp_header(_FIN_FLAG | _ACK_FLAG, src_addr, src_port, dest_addr, dest_port, seq_num, ack_num, None)
     full_ip_packet = build_ip_header(src_addr, dest_addr, ttl, fin_ack_tcp_component)
     return full_ip_packet
+
+def build_syn_ack_packet(src_addr, src_port, dest_addr, dest_port, ttl, seq_num, ack_num):
+    fin_ack_tcp_component = \
+        _build_tcp_header(_SYN_FLAG | _ACK_FLAG, src_addr, src_port, dest_addr, dest_port, seq_num, ack_num, None)
+    full_ip_packet = build_ip_header(src_addr, dest_addr, ttl, fin_ack_tcp_component)
+    return full_ip_packet
     
 def parse_tcp_header_response(data):
     tcp_header = struct.unpack(">HHIIBBHHH", data)
