@@ -135,7 +135,7 @@ class MyTcpSocket:
                     packet_dst_str = str(IPv4Address(packet_dst))
                     packet_type_str = "(" + packet_type_str + ")"
                     print("_get_next_packet: Not our packet:", packet_src_str, "->", packet_dst_str
-                    ,packet_type_str)
+                            ,packet_type_str)
                 continue
 
             ip_checksum_clear = verify_ip_checksum(packet_src, packet_dst, ip_header, self.debug)
@@ -476,7 +476,6 @@ class MyTcpSocket:
                 break
         
         # Update local values for _get_next_packet
-
         self.src_host = requested_ip
         self.dst_host = remote_ip
         self.dst_port = remote_port
@@ -486,7 +485,11 @@ class MyTcpSocket:
         syn_ack_ack_num = (syn_seq_num + 1) % _MAX_SEQ_ACK_VAL
         syn_ack_response = build_syn_ack_packet(requested_ip, self.src_port, remote_ip, remote_port, 
                            self.timeout, syn_ack_seq_num, syn_ack_ack_num)
-        self.sending_socket.sendall(syn_ack_response)
+
+        # sendall doesn't work for some reason
+        self.sending_socket.sendto(syn_ack_response, (str(IPv4Address(self.dst_host)), self.dst_port))
+        if self.debug:
+            print("listen: sent syn/ack")
 
         # Receive ACK
         start_time = time()
@@ -503,6 +506,8 @@ class MyTcpSocket:
             if flags == _ACK_FLAG and ack_seq_num == syn_ack_ack_num and \
                 ack_ack_num == (syn_ack_seq_num + 1) % _MAX_SEQ_ACK_VAL:
                 # We got our ACK!
+                if self.debug:
+                    print("listen: ACK received!")
                 self._handle_congestion()
                 break
             else:
@@ -510,9 +515,11 @@ class MyTcpSocket:
                     print("listen: packet received but not an ACK for us")
         
         # Create and return new socket object
-        new_sock = MyTcpSocket(self.debug, self.debug_verbose, self.bypass_checksum, self.src_host,
+        new_sock = MyTcpSocket(self.debug, True, self.bypass_checksum, self.src_host,
                                self.src_port, self.dst_host, self.dst_port, ack_seq_num, ack_ack_num)
 
+        if self.debug:
+            print("listen: new connection from", str(IPv4Address(self.dst_host)) + ":" + str(self.dst_port))
         return new_sock
 
 if __name__ == "__main__":
@@ -546,10 +553,14 @@ if __name__ == "__main__":
         s = MyTcpSocket(debug=True, bypass_checksum=True)
         s.bind(4200)
 
+        def handle(sock):
+            message = sock.recv()
+            sock.send(message)
+            sock.close()
+
         while True:
             new_conn = s.listen()
-            data = new_conn.recv()
-            new_conn.send(data)
-            new_conn.close()
+            handle(new_conn)
+        
 
 
