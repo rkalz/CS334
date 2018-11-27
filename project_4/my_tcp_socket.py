@@ -119,8 +119,8 @@ class MyTcpSocket:
             ip_header = ip_and_later[:_MIN_HEADER_SIZE]
 
             packet_src, packet_dst, packet_type, total_length = parse_ip_header(ip_header)
-            if (not listen and packet_type != socket.IPPROTO_TCP or packet_src != self.dst_host \
-                or packet_dst != self.src_host) or (listen and packet_type != socket.IPPROTO_TCP):
+            if (not listen and (packet_type != socket.IPPROTO_TCP or packet_src != self.dst_host \
+                or packet_dst != self.src_host)) or (listen and packet_type != socket.IPPROTO_TCP):
                 # Either it's not TCP, sent by a different source, and/or meant for a 
                 # different IP
                 if self.debug_verbose:
@@ -285,6 +285,8 @@ class MyTcpSocket:
         self.timeout = new_timeout
 
     def send(self, data_to_send):
+        if self.is_server:
+            raise Exception("Can't send on a listening socket!")
         if not self.is_connected:
             raise Exception("Cannot send data on a closed socket!")
 
@@ -338,7 +340,8 @@ class MyTcpSocket:
         # receive data
         # TODO: Handle ordering issues (hopefully not needed for this)
         # See notes in send
-
+        if self.is_server:
+            raise Exception("Cannot perform on a listening socket!")
         if not self.is_connected:
             raise Exception("Cannot receive data on a closed socket!")
 
@@ -457,10 +460,8 @@ class MyTcpSocket:
             raise Exception("Cannot call bind on a configured socket!")
         self.src_port = port_number
         self.is_server = True
-    
-    def accept(self):
-        # Since we're not messing with the kernel, this doesn't need to do anything
-        pass
+        if self.debug:
+            print("bind: now listening on port", str(self.src_port))
     
     def listen(self):
         # Get the next packet whose destination port matches our listening port
@@ -483,8 +484,8 @@ class MyTcpSocket:
         # Build SYN/ACK (S = 0, A = X+1)
         syn_ack_seq_num = 0
         syn_ack_ack_num = (syn_seq_num + 1) % _MAX_SEQ_ACK_VAL
-        syn_ack_response = build_syn_ack_packet(self.src_host, self.src_port, self.dst_host, self.dst_port, self.timeout, 
-                           syn_ack_seq_num, syn_ack_ack_num)
+        syn_ack_response = build_syn_ack_packet(requested_ip, self.src_port, remote_ip, remote_port, 
+                           self.timeout, syn_ack_seq_num, syn_ack_ack_num)
         self.sending_socket.sendall(syn_ack_response)
 
         # Receive ACK
@@ -510,7 +511,7 @@ class MyTcpSocket:
         
         # Create and return new socket object
         new_sock = MyTcpSocket(self.debug, self.debug_verbose, self.bypass_checksum, self.src_host,
-                               self.src_port, self.dst_host, self.dst_port, ack_seq_num, ack_ack_num, 0)
+                               self.src_port, self.dst_host, self.dst_port, ack_seq_num, ack_ack_num)
 
         return new_sock
 
@@ -542,4 +543,13 @@ if __name__ == "__main__":
 
         s.close()
     else:
-        pass
+        s = MyTcpSocket(debug=True, bypass_checksum=True)
+        s.bind(4200)
+
+        while True:
+            new_conn = s.listen()
+            data = new_conn.recv()
+            new_conn.send(data)
+            new_conn.close()
+
+
