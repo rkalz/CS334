@@ -318,11 +318,13 @@ class MyTcpSocket:
                 if self.debug:
                     print("send: Packet received, but it wasn't an ACK")
                 continue
-            if ack_seq_num != data_ack_num and \
+            if ack_seq_num != data_ack_num or \
                 ack_ack_num != (data_seq_num + len(data_to_send)) % _MAX_SEQ_ACK_VAL:
                 # The SEQ and ACK numbers aren't correct
                 if self.debug:
                     print("send: Received incorrect SEQ and ACK nums")
+                    print("send: Expected SEQ {} Got {}".format(data_ack_num, ack_seq_num))
+                    print("send: Expected ACK {} Got {}".format(data_seq_num + len(data_to_send), ack_ack_num))
                 continue
             self.last_seq_recv = ack_seq_num
             self.last_ack_recv = ack_ack_num
@@ -363,10 +365,12 @@ class MyTcpSocket:
                 if self.debug:
                     print("recv: Packet received, but it wasn't a PSH ACK")
                 continue
-            if data_ack_seq_num != self.last_seq_recv and data_ack_ack_num != self.last_ack_recv:
+            if data_ack_seq_num != self.last_seq_recv or data_ack_ack_num != self.last_ack_recv:
                 # SEQ and ACK nums are bad. Keep listening.
                 if self.debug:
                     print("recv: Received incorrect SEQ and/or ACK numbers")
+                    print("recv: Expected SEQ {} Got {}".format(data_ack_seq_num, self.last_seq_recv))
+                    print("recv: Expected ACK {} Got {}".format(data_ack_ack_num, self.last_ack_recv))
                 continue
             
             self.last_seq_recv = data_ack_seq_num
@@ -521,6 +525,7 @@ class MyTcpSocket:
         if self.debug:
             print("listen: new connection from", str(IPv4Address(self.dst_host)) + ":" + str(self.dst_port))
         return new_sock
+
 
 if __name__ == "__main__":
     test_server = True
