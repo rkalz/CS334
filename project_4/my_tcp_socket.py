@@ -429,8 +429,8 @@ class MyTcpSocket:
             if fin_ack_resp_seq_num != fin_ack_ack_num \
                 and fin_ack_resp_ack_num != (fin_ack_seq_num + 1) % _MAX_SEQ_ACK_VAL:
                 if self.debug:
-                    print("close: FIN/ACK received but the SEQ/ACK numbers aren't right")
-                continue
+                    print("close: warning: FIN/ACK received but the SEQ/ACK numbers aren't right")
+
             if self.debug:
                 print("recv: server FIN/ACK received")
             
