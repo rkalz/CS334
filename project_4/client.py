@@ -28,7 +28,7 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
         hello = hello.encode(encoding='ascii')
         if debug:
             print("client: hello sent:", hello)
-        sleep(0.1)
+            sleep(0.1)
         sock.send(hello)
 
         # Convert the response into a list of strings
@@ -82,7 +82,8 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
 
         try:
             # Send solution message and format the response
-            sleep(0.1)
+            if self.debug:
+                sleep(0.1)
             sock.send(solution)
 
             response = sock.recv()
@@ -128,9 +129,13 @@ if __name__ == "__main__":
         port = 3005
 
     host = None
+    debug = args.debug
     if args.hostname.lower() == "cs334":
         host = "192.168.1.2"
+    elif args.hostname.lower() == "127.0.0.1" and not debug:
+        # We get a race condition on loopback server
+        debug = True
     else:
         host = args.hostname
 
-    get_my_bytes(host, port, args.blazerid, args.ssl, args.debug)
+    get_my_bytes(host, port, args.blazerid, args.ssl, debug)
