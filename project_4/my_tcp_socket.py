@@ -59,8 +59,8 @@ class MyTcpSocket:
             # The odds of this occuring seem pretty slim, though
             self.src_port = randint(10000, 65535)
 
-        self.dst_host = None
-        self.dst_port = None
+        self.dst_host = dst_host
+        self.dst_port = dst_port
         self.timeout = 60
         self.is_connected = False
 
@@ -112,7 +112,7 @@ class MyTcpSocket:
 
             # Receive a full ethernet frame
             # (4096 is larger than an Ethernet frame but
-            # I don't know the exact number so better
+            # I don't know the exact number so better safe than sorry
             response_packet = self.receiving_socket.recv(4096)
 
             # Strip MAC layer and extract IP header
@@ -121,9 +121,9 @@ class MyTcpSocket:
 
             packet_src, packet_dst, packet_type, total_length = parse_ip_header(ip_header)
 
-            if packet_type != socket.IPPROTO_TCP or \
+            if packet_type != socket.IPPROTO_TCP and \
                 (not listen and (packet_src != self.dst_host or packet_dst != self.src_host) or \
-                (listen and packet_dst != self.src_port)):
+                (listen and packet_dst != self.src_host)):
                 # Either it's not TCP, sent by a different source, and/or meant for a 
                 # different IP
                 if self.debug_verbose:
@@ -165,6 +165,7 @@ class MyTcpSocket:
                 # Multiple sockets connected to the same IP, perhaps?
                 if self.debug_verbose:
                     print("_get_next_packet: Not our packet:", src_port, "->", dest_port)
+                    print("_get_next_packet: Expected {} -> {}".format(self.dst_port, self.src_port))
                 continue
             
             tcp_checksum_clear = verify_tcp_checksum(packet_src, packet_dst, tcp_header_and_data, 
@@ -303,7 +304,8 @@ class MyTcpSocket:
         data_packet = build_psh_ack_packet(self.src_host, self.src_port, 
                     self.dst_host, self.dst_port, self.timeout, data_seq_num, 
                     data_ack_num, data_to_send)
-        self.sending_socket.sendall(data_packet)
+        # self.sending_socket.sendall(data_packet)
+        self.sending_socket.sendto(data_packet, (str(IPv4Address(self.dst_host)), self.dst_port))
 
         start_time = time()
         while True:
@@ -376,8 +378,16 @@ class MyTcpSocket:
                     self._get_next_packet()
                 self.last_seq_recv = data_ack_seq_num
                 self.last_ack_recv = data_ack_ack_num
-                self.last_data_recv = len(resp_data)
+                if resp_data is not None:
+                    self.last_data_recv = len(resp_data)
                 
+                if (data_ack_flags & _FIN_FLAG):
+                    if self.debug:
+                        print("recv: recived FIN request")
+                    self._handle_congestion()
+                    self.close()
+                    return
+
                 psh_ack_flag = _PSH_FLAG | _ACK_FLAG
                 if not (data_ack_flags & psh_ack_flag):
                     # Not a PSH/ACK flag. Keep listening.
@@ -408,7 +418,8 @@ class MyTcpSocket:
             ack_confirm_recv = build_ack_packet(self.src_host, self.src_port, 
                         self.dst_host, self.dst_port, self.timeout, ack_confirm_seq_num, 
                         ack_confirm_ack_num, None)
-            self.sending_socket.sendall(ack_confirm_recv)
+            # self.sending_socket.sendall(ack_confirm_recv)
+            self.sending_socket.sendto(ack_confirm_recv, (str(IPv4Address(self.dst_host)), self.dst_port))
 
             if self.debug:
                 print("recv: sent ACK")
@@ -422,7 +433,9 @@ class MyTcpSocket:
 
     def close(self):
         if not self.is_connected:
-            raise Exception("Cannot close a socket that's already closed!")
+            if self.debug:
+                print("close: attempting to close a closed socket")
+            return
 
         fin_ack_seq_num = self.last_ack_recv
         fin_ack_ack_num = (self.last_seq_recv + self.last_data_recv) % _MAX_SEQ_ACK_VAL
@@ -437,7 +450,8 @@ class MyTcpSocket:
             # X and Y are the SEQ and ACK from the last sent ACK
             fin_ack_to_send = build_fin_ack_packet(self.src_host, self.src_port, self.dst_host, 
                               self.dst_port, self.timeout, fin_ack_seq_num, fin_ack_ack_num)
-            self.sending_socket.sendall(fin_ack_to_send)
+            self.sending_socket.sendto(fin_ack_to_send, (str(IPv4Address(self.dst_host)), self.dst_port))
+
             if self.debug:
                 print("close: FIN/ACK sent")
 
@@ -456,7 +470,7 @@ class MyTcpSocket:
                     print("close: warning: FIN/ACK received but the SEQ/ACK numbers aren't right")
 
             if self.debug:
-                print("recv: server FIN/ACK received")
+                print("close: server FIN/ACK received")
             
             self.last_seq_recv = fin_ack_resp_seq_num
             self.last_ack_recv = fin_ack_resp_ack_num
@@ -467,7 +481,7 @@ class MyTcpSocket:
             end_ack_ack_num = (fin_ack_ack_num + 1) % _MAX_SEQ_ACK_VAL
             final_ack_packet = build_ack_packet(self.src_host, self.src_port, self.dst_host, 
                               self.dst_port, self.timeout, end_ack_seq_num, end_ack_ack_num, None)
-            self.sending_socket.sendall(final_ack_packet)
+            self.sending_socket.sendto(final_ack_packet, (str(IPv4Address(self.dst_host)), self.dst_port))
             if self.debug:
                 print("close: final ACK sent")
 
@@ -510,7 +524,6 @@ class MyTcpSocket:
         syn_ack_response = build_syn_ack_packet(requested_ip, self.src_port, remote_ip, remote_port, 
                            self.timeout, syn_ack_seq_num, syn_ack_ack_num)
 
-        # sendall doesn't work for some reason
         self.sending_socket.sendto(syn_ack_response, (str(IPv4Address(self.dst_host)), self.dst_port))
         if self.debug:
             print("listen: sent SYN/ACK")
@@ -539,8 +552,8 @@ class MyTcpSocket:
                     print("listen: packet received but not an ACK for us")
         
         # Create and return new socket object
-        new_sock = MyTcpSocket(self.debug, self.debug_verbose, self.bypass_checksum, self.src_host,
-                               self.src_port, self.dst_host, self.dst_port, ack_seq_num, ack_ack_num)
+        new_sock = MyTcpSocket(self.debug, self.debug_verbose, self.bypass_checksum, requested_ip,
+                               self.src_port, remote_ip, remote_port, ack_seq_num, ack_ack_num)
 
         if self.debug:
             my_ip_str = str(IPv4Address(self.src_host))
@@ -551,7 +564,7 @@ class MyTcpSocket:
 
 
 if __name__ == "__main__":
-    test_server = False
+    test_server = True
     if not test_server:
         # BUG: If a MyTcpSocket object is named socket, gethostbyname will fail
         s = MyTcpSocket(debug=True, bypass_checksum=True)
@@ -565,9 +578,6 @@ if __name__ == "__main__":
         resp = s.recv()
         print("Response:", resp)
 
-        # NOTE: Sometimes ncat will send back a PSH/ACK after a data ACK instead of 
-        # a non data ACK and then a PSH/ACK. This will appear as spurious retransmission
-        # in Wireshark (and a debug messaage here that we got a non-ACK response)
         s.send("there\n".encode())
         resp = s.recv()
         print("Response:", resp)
@@ -583,12 +593,12 @@ if __name__ == "__main__":
 
         def handle(sock):
             message = sock.recv()
-            sock.send(message)
+            try:
+                sock.send(message)
+            except Exception:
+                pass
             sock.close()
 
         while True:
             new_conn = s.listen()
             handle(new_conn)
-        
-
-
