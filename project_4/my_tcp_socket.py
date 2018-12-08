@@ -120,8 +120,10 @@ class MyTcpSocket:
             ip_header = ip_and_later[:_MIN_HEADER_SIZE]
 
             packet_src, packet_dst, packet_type, total_length = parse_ip_header(ip_header)
-            if (not listen and (packet_type != socket.IPPROTO_TCP or packet_src != self.dst_host \
-                or packet_dst != self.src_host)) or (listen and packet_type != socket.IPPROTO_TCP):
+
+            if packet_type != socket.IPPROTO_TCP or \
+                (not listen and (packet_src != self.dst_host or packet_dst != self.src_host) or \
+                (listen and packet_dst != self.src_port)):
                 # Either it's not TCP, sent by a different source, and/or meant for a 
                 # different IP
                 if self.debug_verbose:
@@ -157,7 +159,7 @@ class MyTcpSocket:
             src_port, dest_port, seq_num, ack_num, offset_and_ns, \
             flags, _, _ = parse_tcp_header_response(tcp_header)
                 
-            if (not listen and src_port != self.dst_port and dest_port != self.src_port) or \
+            if not listen and (src_port != self.dst_port or dest_port != self.src_port) or \
                 (listen and dest_port != self.src_port):
                 # This isn't our TCP packet. Restart.
                 # Multiple sockets connected to the same IP, perhaps?
@@ -198,9 +200,6 @@ class MyTcpSocket:
             if len(data) == 0:
                 data = None
             
-            if self.debug:
-                print("_get_next_packet: Expecting {} -> {}".format(self.dst_port, self.src_port))
-                print("_get_next_packet: Got {} -> {}".format(src_port, dest_port))
             if listen:
                 return packet_src, packet_dst, src_port, seq_num, flags
             return seq_num, ack_num, flags, data
