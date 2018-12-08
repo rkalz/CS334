@@ -8,11 +8,9 @@ from my_tcp_socket import MyTcpSocket
 
 
 def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
-    # TODO: Fix the checksum so we can disable this flag@
     sock = MyTcpSocket(debug=debug)
     if is_ssl:
-        print("SSL has been disabled")
-        # sock = ssl.wrap_socket(sock)                  
+        print("SSL has been disabled")              
 
     try:
         sock.connect(host, port)
@@ -44,7 +42,6 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
         # If we get an except Exception as eion, close the socket and return
         print("client: response recv failed:", e)
         sock.close()
-        get_my_bytes(host, port, blazerid, is_ssl, debug)
 
     while len(response) == 5 and response[0] == header and response[1] == "STATUS":
         # Make sure we have a correctly formatted STATUS message before handling
@@ -74,7 +71,6 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
             if debug:
                 print("client: response computation failed")
             sock.close()
-            get_my_bytes(host, port, blazerid, is_ssl, debug)
 
         # Build solution message
         challenge_number = str(floor(challenge_number))
@@ -97,7 +93,6 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
         except Exception as e:
             print("client: solution send failed:", e)
             sock.close()
-            get_my_bytes(host, port, blazerid, is_ssl, debug)
 
     if len(response) == 3 and response[0] == header and response[2] == "BYE":
         # If we're out of challenge loop, make sure we have a correctly formatted BYE message
@@ -107,7 +102,6 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
         if debug:
             print("client: bad final message", response)
         sock.close()
-        get_my_bytes(host, port, blazerid, is_ssl, debug)
 
     sock.close()
 

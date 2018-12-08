@@ -330,7 +330,7 @@ class MyTcpSocket:
                 if self.debug:
                     print("send: received response but SEQ and/or ACK was wrong")
                     print("send: expected SEQ {} got {}".format(ack_seq_num, data_ack_num))
-                    print("send: expected ACK {} got {}".format(data_seq_num + len(data_to_send, ack_ack_num)))
+                    print("send: expected ACK {} got {}".format(data_seq_num + len(data_to_send), ack_ack_num))
                     exit()
                 continue
 
@@ -467,7 +467,7 @@ class MyTcpSocket:
                               self.dst_port, self.timeout, end_ack_seq_num, end_ack_ack_num, None)
             self.sending_socket.sendall(final_ack_packet)
             if self.debug:
-                print("close: final ack sent")
+                print("close: final ACK sent")
 
             self.sending_socket.close()
             self.receiving_socket.close()
@@ -494,7 +494,7 @@ class MyTcpSocket:
             if flags == _SYN_FLAG:
                 # Receive SYN (S = X)
                 if self.debug:
-                    print("listen: syn received!")
+                    print("listen: SYN received!")
                 break
         
         # Update local values for _get_next_packet
@@ -511,7 +511,7 @@ class MyTcpSocket:
         # sendall doesn't work for some reason
         self.sending_socket.sendto(syn_ack_response, (str(IPv4Address(self.dst_host)), self.dst_port))
         if self.debug:
-            print("listen: sent syn/ack")
+            print("listen: sent SYN/ACK")
 
         # Receive ACK
         start_time = time()
@@ -537,16 +537,19 @@ class MyTcpSocket:
                     print("listen: packet received but not an ACK for us")
         
         # Create and return new socket object
-        new_sock = MyTcpSocket(self.debug, True, self.bypass_checksum, self.src_host,
+        new_sock = MyTcpSocket(self.debug, self.debug_verbose, self.bypass_checksum, self.src_host,
                                self.src_port, self.dst_host, self.dst_port, ack_seq_num, ack_ack_num)
 
         if self.debug:
-            print("listen: new connection from", str(IPv4Address(self.dst_host)) + ":" + str(self.dst_port))
+            my_ip_str = str(IPv4Address(self.src_host))
+            remote_ip_str = str(IPv4Address(self.dst_host))
+            print("listen: new connection {}:{} -> {}:{}".format(remote_ip_str, self.dst_port, 
+                my_ip_str, self.src_port))
         return new_sock
 
 
 if __name__ == "__main__":
-    test_server = False
+    test_server = True
     if not test_server:
         # BUG: If a MyTcpSocket object is named socket, gethostbyname will fail
         s = MyTcpSocket(debug=True, bypass_checksum=True)
