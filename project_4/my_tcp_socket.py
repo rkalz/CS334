@@ -75,6 +75,7 @@ class MyTcpSocket:
             self.is_connected = True
         
         self.is_server = False
+        self.psh_queue = []
 
     @staticmethod
     def _resolve_local_ip():
@@ -165,7 +166,7 @@ class MyTcpSocket:
                 continue
             
             tcp_checksum_clear = verify_tcp_checksum(packet_src, packet_dst, tcp_header_and_data, 
-                                 self.debug)
+                                 self.debug_verbose)
             if not tcp_checksum_clear:
                 # See notes on IP checksum
                 if self.debug_verbose:
@@ -174,10 +175,10 @@ class MyTcpSocket:
                     # Turns out lots of utilities don't send correct checksums
                     continue
                 
-            if self.debug:
+            if self.debug_verbose:
                 print("_get_next_packet: TCP response received")
             
-            if self.bypass_checksum and self.debug:
+            if not self.bypass_checksum and self.debug:
                 if not ip_checksum_clear:
                     print("_get_next_packet: IP checksum failed!")
                 if not tcp_checksum_clear:
@@ -294,47 +295,62 @@ class MyTcpSocket:
         data_seq_num = self.last_ack_recv
         data_ack_num = (self.last_seq_recv + self.last_data_recv) % _MAX_SEQ_ACK_VAL 
 
+        # TODO: Handle data that's too large to send in one packet
+        # NOTE: Split packets and send all but last with ACK only, send last with PSH/ACK
+        # The PSH flag tells the remote that there's no more data to be sent
+        data_packet = build_psh_ack_packet(self.src_host, self.src_port, 
+                    self.dst_host, self.dst_port, self.timeout, data_seq_num, 
+                    data_ack_num, data_to_send)
+        self.sending_socket.sendall(data_packet)
+
         start_time = time()
         while True:
             diff = time() - start_time
             if diff > self.timeout:
                 break
 
-            # TODO: Handle data that's too large to send in one packet
-            # NOTE: Split packets and send all but last with ACK only, send last with PSH/ACK
-            # The PSH flag tells the remote that there's no more data to be sent
-            data_packet = build_psh_ack_packet(self.src_host, self.src_port, 
-                        self.dst_host, self.dst_port, self.timeout, data_seq_num, 
-                        data_ack_num, data_to_send)
-            self.sending_socket.sendall(data_packet)
-
             if self.debug:
                 print("send: sent data")
 
-            # receive ACK
-            ack_seq_num, ack_ack_num, ack_flags, _ = self._get_next_packet()
-            if ack_flags != _ACK_FLAG:
-                # This isn't an ACK!
-                if self.debug:
-                    print("send: Packet received, but it wasn't an ACK")
-                continue
-            if ack_seq_num != data_ack_num or \
-                ack_ack_num != (data_seq_num + len(data_to_send)) % _MAX_SEQ_ACK_VAL:
-                # The SEQ and ACK numbers aren't correct
-                if self.debug:
-                    print("send: Received incorrect SEQ and ACK nums")
-                    print("send: Expected SEQ {} Got {}".format(data_ack_num, ack_seq_num))
-                    print("send: Expected ACK {} Got {}".format(data_seq_num + len(data_to_send), ack_ack_num))
-                continue
+            # receive PSH/ACK or ACK
+            psh_ack_flag = _PSH_FLAG | _ACK_FLAG
+            ack_seq_num, ack_ack_num, ack_flags, data = self._get_next_packet()
             self.last_seq_recv = ack_seq_num
             self.last_ack_recv = ack_ack_num
+            if data is not None:
+                self.last_data_recv = len(data)
+            
+            if not (_ACK_FLAG & ack_flags):
+                if self.debug:
+                    print("send: received response but it's not an ACK")
+                continue
+            
+            if ack_seq_num != data_ack_num or \
+                ack_ack_num != data_seq_num + len(data_to_send):
+                if self.debug:
+                    print("send: received response but SEQ and/or ACK was wrong")
+                    print("send: expected SEQ {} got {}".format(ack_seq_num, data_ack_num))
+                    print("send: expected ACK {} got {}".format(data_seq_num + len(data_to_send, ack_ack_num)))
+                    exit()
+                continue
+
+            if psh_ack_flag & ack_flags:
+                # Got a PSH/ACK, add data to queue
+                if data is None:
+                    if self.debug:
+                        print("send: received PSH/ACK without any data")
+                    continue
+                self.psh_queue.append((ack_seq_num, ack_ack_num, data))
+                if self.debug:
+                    print("send: received PSH/ACK and added data to queue")
+            else:
+                if self.debug:
+                    print("send: received ACK")
 
             self._handle_congestion()
-            if self.debug:
-                print("send: received ACK")
             return
         
-        # Never got our ACK
+        # Never got our PSH/ACK
         self._handle_congestion(True)
         raise Exception("Connection timeout!")
 
@@ -352,39 +368,41 @@ class MyTcpSocket:
             diff = time() - start_time
             if diff > self.timeout:
                 break
-
-            data_ack_seq_num, data_ack_ack_num, data_ack_flags, resp_data = \
-                self._get_next_packet()
             
-            psh_ack_flag = _PSH_FLAG | _ACK_FLAG
-            if not (data_ack_flags & psh_ack_flag):
-                # Not a PSH/ACK flag. Keep listening.
-                # TODO: Correct format is to keep receiving ACK flagged packets
-                # until we get a PSH/ACK. This code will only work for a single packet
-                # TODO: Should also handle FIN flagged packets
-                if self.debug:
-                    print("recv: Packet received, but it wasn't a PSH ACK")
-                continue
-            if data_ack_seq_num != self.last_seq_recv or data_ack_ack_num != self.last_ack_recv:
-                # SEQ and ACK nums are bad. Keep listening.
-                if self.debug:
-                    print("recv: Received incorrect SEQ and/or ACK numbers")
-                    print("recv: Expected SEQ {} Got {}".format(data_ack_seq_num, self.last_seq_recv))
-                    print("recv: Expected ACK {} Got {}".format(data_ack_ack_num, self.last_ack_recv))
-                continue
-            
-            self.last_seq_recv = data_ack_seq_num
-            self.last_ack_recv = data_ack_ack_num
-            self.last_data_recv = len(resp_data)
+            if len(self.psh_queue) == 0:
+                data_ack_seq_num, data_ack_ack_num, data_ack_flags, resp_data = \
+                    self._get_next_packet()
+                self.last_seq_recv = data_ack_seq_num
+                self.last_ack_recv = data_ack_ack_num
+                self.last_data_recv = len(resp_data)
+                
+                psh_ack_flag = _PSH_FLAG | _ACK_FLAG
+                if not (data_ack_flags & psh_ack_flag):
+                    # Not a PSH/ACK flag. Keep listening.
+                    # TODO: Correct format is to keep receiving ACK flagged packets
+                    # until we get a PSH/ACK. This code will only work for a single packet
+                    # TODO: Should also handle FIN flagged packets
+                    if self.debug:
+                        print("recv: Packet received, but it wasn't a PSH ACK")
+                    continue
+                if data_ack_seq_num != self.last_seq_recv or data_ack_ack_num != self.last_ack_recv:
+                    # SEQ and ACK nums are bad. Keep listening.
+                    if self.debug:
+                        print("recv: Received incorrect SEQ and/or ACK numbers")
+                        print("recv: Expected SEQ {} Got {}".format(data_ack_seq_num, self.last_seq_recv))
+                        print("recv: Expected ACK {} Got {}".format(data_ack_ack_num, self.last_ack_recv))
+                    continue
 
-            # We got something!
-            self._handle_congestion()
-            if self.debug:
-                print("recv: received data")
+                # We got something!
+                self._handle_congestion()
+                if self.debug:
+                    print("recv: received data")
+            else:
+                data_ack_seq_num, data_ack_ack_num, resp_data = self.psh_queue.pop(0)
             
             # send ACK
-            ack_confirm_seq_num = self.last_ack_recv
-            ack_confirm_ack_num = (self.last_seq_recv + self.last_data_recv) % _MAX_SEQ_ACK_VAL
+            ack_confirm_seq_num = data_ack_ack_num
+            ack_confirm_ack_num = (data_ack_seq_num + len(resp_data)) % _MAX_SEQ_ACK_VAL
             ack_confirm_recv = build_ack_packet(self.src_host, self.src_port, 
                         self.dst_host, self.dst_port, self.timeout, ack_confirm_seq_num, 
                         ack_confirm_ack_num, None)
@@ -528,10 +546,10 @@ class MyTcpSocket:
 
 
 if __name__ == "__main__":
-    test_server = True
+    test_server = False
     if not test_server:
         # BUG: If a MyTcpSocket object is named socket, gethostbyname will fail
-        s = MyTcpSocket(debug=True)
+        s = MyTcpSocket(debug=True, bypass_checksum=True)
 
         # Install netcat and start an echo server with
         # ncat -l 2000 -k -c 'xargs -n1 echo'
