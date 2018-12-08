@@ -82,7 +82,7 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
 
         try:
             # Send solution message and format the response
-            if self.debug:
+            if debug:
                 sleep(0.1)
             sock.send(solution)
 
