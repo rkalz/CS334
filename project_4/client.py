@@ -27,7 +27,6 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
         hello = hello.encode(encoding='ascii')
         if debug:
             print("client: hello sent:", hello)
-
         sock.send(hello)
 
         # Convert the response into a list of strings

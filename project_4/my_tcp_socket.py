@@ -198,6 +198,9 @@ class MyTcpSocket:
             if len(data) == 0:
                 data = None
             
+            if self.debug:
+                print("_get_next_packet: Expecting {} -> {}".format(self.dst_port, self.src_port))
+                print("_get_next_packet: Got {} -> {}".format(src_port, dest_port))
             if listen:
                 return packet_src, packet_dst, src_port, seq_num, flags
             return seq_num, ack_num, flags, data
@@ -549,7 +552,7 @@ class MyTcpSocket:
 
 
 if __name__ == "__main__":
-    test_server = True
+    test_server = False
     if not test_server:
         # BUG: If a MyTcpSocket object is named socket, gethostbyname will fail
         s = MyTcpSocket(debug=True, bypass_checksum=True)
