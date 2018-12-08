@@ -338,7 +338,7 @@ class MyTcpSocket:
                     exit()
                 continue
 
-            if psh_ack_flag & ack_flags:
+            if psh_ack_flag == ack_flags:
                 # Got a PSH/ACK, add data to queue
                 if data is None:
                     if self.debug:
@@ -383,7 +383,7 @@ class MyTcpSocket:
                 
                 if (data_ack_flags & _FIN_FLAG):
                     if self.debug:
-                        print("recv: recived FIN request")
+                        print("recv: recieved FIN request")
                     self._handle_congestion()
                     self.close()
                     return
@@ -444,7 +444,7 @@ class MyTcpSocket:
         while True:
             diff = time() - start_time
             if diff > self.timeout:
-                raise Exception("Connection timeout!")
+                break
 
             # send FIN/ACK (S=X, A=Y)
             # X and Y are the SEQ and ACK from the last sent ACK
@@ -491,7 +491,9 @@ class MyTcpSocket:
             return
         
         self._handle_congestion(True)
-        raise Exception("Connection timeout!")
+        self.sending_socket.close()
+        self.receiving_socket.close()
+        self.is_connected = False
     
     def bind(self, port_number):
         if self.is_server or self.is_connected:
@@ -512,6 +514,8 @@ class MyTcpSocket:
                 if self.debug:
                     print("listen: SYN received!")
                 break
+            if self.debug:
+                print("listen: received packet but it wasn't a SYN")
         
         # Update local values for _get_next_packet
         self.src_host = requested_ip

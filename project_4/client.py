@@ -2,6 +2,7 @@
 
 import ssl
 from math import floor
+from time import sleep
 
 import argparse
 from my_tcp_socket import MyTcpSocket
@@ -27,6 +28,7 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
         hello = hello.encode(encoding='ascii')
         if debug:
             print("client: hello sent:", hello)
+        sleep(0.1)
         sock.send(hello)
 
         # Convert the response into a list of strings
@@ -80,6 +82,7 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
 
         try:
             # Send solution message and format the response
+            sleep(0.1)
             sock.send(solution)
 
             response = sock.recv()
@@ -100,7 +103,6 @@ def get_my_bytes(host, port, blazerid, is_ssl, debug=False):
     else:
         if debug:
             print("client: bad final message", response)
-        sock.close()
 
     sock.close()
 
