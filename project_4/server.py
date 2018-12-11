@@ -6,7 +6,7 @@ from random import choice, randint
 from threading import Thread
 from time import sleep
 
-def handle(sock, debug=False):
+def handle(sock, debug=False, ssl=False):
     hello = sock.recv()
     hello = hello.decode().strip().split(" ")
 
@@ -16,8 +16,11 @@ def handle(sock, debug=False):
             print("Recevied bad hello: {}".format(hello))
         sock.close()
         return
-    
-    code = sha512(hello[2].encode()).hexdigest()
+
+    name = hello[2]
+    if ssl:
+        name = name[::-1] # reversed name
+    code = sha512(name.encode()).hexdigest()
     challenges_remaining = 100
 
     first = randint(0, 10000)
